@@ -13,7 +13,7 @@ import {
 import type { Coleccion, CompraMSI, Datos, Gasto, Mes } from '../shared/tipos.ts';
 import { Anillo, Columnas } from './Graficas.tsx';
 import type { Item, Store } from './store.ts';
-import { COLOR_MSI, colorDe, fmt, mesCorto, mesLargo, textoReparto, textoSplit } from './ui.ts';
+import { COLOR_MSI, colorDe, fmt, mesCorto, mesLargo, textoMeses, textoReparto, textoSplit } from './ui.ts';
 
 interface Props {
   real: Datos;
@@ -41,8 +41,10 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
     msiMes.reduce((s, c) => s + (pagado.has(c.id) ? c.pagoMensual : 0), 0);
 
   const porMonto = (a: Gasto, b: Gasto) => monto(b) - monto(a);
-  const fijos = real.gastos.filter((g) => g.frecuencia === 'mes').sort(porMonto);
-  const apartados = real.gastos.filter((g) => g.frecuencia !== 'mes').sort(porMonto);
+  const deEsteMes = real.gastos.filter((g) => g.meses?.includes(mes)).sort(porMonto);
+  const repetidos = real.gastos.filter((g) => !g.meses);
+  const fijos = repetidos.filter((g) => g.frecuencia === 'mes').sort(porMonto);
+  const apartados = repetidos.filter((g) => g.frecuencia !== 'mes').sort(porMonto);
 
   const ultimo = ultimoMesMSI(real, mes);
   const sinMsi = ultimo ? sumarMeses(ultimo, 1) : mes;
@@ -64,6 +66,7 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
             : g.frecuencia !== 'mes'
               ? `Se paga ${fmt(g.monto)} ${CUANDO[g.frecuencia]}`
               : (g.nota ?? categoria(g)?.nombre ?? ''),
+        g.meses && g.meses.length > 1 && textoMeses(g.meses),
         textoReparto(g.reparto, real.miembros),
       ].filter(Boolean).join(' · ')}
     />
@@ -190,6 +193,15 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
         {fijos.map(filaGasto)}
         <div className="psub"><span>Subtotal</span><b className="amt">{fmt(fijos.reduce((s, g) => s + monto(g), 0))}</b></div>
       </section>
+
+      {deEsteMes.length > 0 && (
+        <section className="panel">
+          <h2>Solo en ciertos meses</h2>
+          <p className="note first">Gastos que no se repiten cada mes y que toca pagar en {mesLargo(mes)}.</p>
+          {deEsteMes.map(filaGasto)}
+          <div className="psub"><span>Subtotal</span><b className="amt">{fmt(deEsteMes.reduce((s, g) => s + monto(g), 0))}</b></div>
+        </section>
+      )}
 
       {apartados.length > 0 && (
         <section className="panel">

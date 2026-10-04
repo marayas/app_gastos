@@ -2,6 +2,8 @@ import {
   FACTOR,
   finMSI,
   gastoDelMes,
+  gastoTerminado,
+  gastoVigente,
   ingresoVigente,
   msiActiva,
   msiDelMes,
@@ -104,13 +106,15 @@ export function informeGastos(d: Datos, mes: Mes, categoria?: string) {
   const nombre = nombresDeCategoria(d);
   const filtro = categoria?.trim().toLowerCase();
   const gastos = d.gastos
+    .filter((g) => !gastoTerminado(g, mes))
     .map((g) => ({
       concepto: g.nombre,
       categoria: nombre(g.categoria),
       monto: r2(g.porDia ? g.porDia.tarifa : g.monto),
       frecuencia: g.porDia ? 'por día de clases' : g.frecuencia === 'anio' ? 'año' : g.frecuencia,
       costoEsteMes: r2(gastoDelMes(d, g, mes)),
-      equivalenteMensual: g.porDia ? null : r2(gastoDelMes(d, g, mes)),
+      equivalenteMensual: g.porDia || g.meses ? null : r2(gastoDelMes(d, g, mes)),
+      soloEnMeses: g.meses ?? null, // se paga completo solo en esos meses; null = todos los meses
       // Compartido con gente de fuera del hogar: `monto` es el total y los costos ya son solo la parte del hogar.
       compartido: g.split
         ? { personas: g.split.personas, parteDelHogar: g.split.tipo === 'iguales' ? 'partes iguales' : g.split.tipo === 'pct' ? `${g.split.valor}%` : r2(g.split.valor ?? 0) }
@@ -151,7 +155,7 @@ export function informePagos(d: Datos, mes: Mes) {
   const nombre = nombresDeCategoria(d);
   const pagado = new Set(d.pagos.filter((p) => p.mes === mes).map((p) => p.itemId));
   const pagos = [
-    ...d.gastos.map((g) => ({
+    ...d.gastos.filter((g) => gastoVigente(g, mes)).map((g) => ({
       concepto: g.nombre, tipo: 'gasto', categoria: nombre(g.categoria), monto: r2(gastoDelMes(d, g, mes)), pagado: pagado.has(g.id),
     })),
     ...d.msi.filter((c) => msiActiva(c, mes)).map((c) => ({

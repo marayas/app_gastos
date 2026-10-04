@@ -1,11 +1,11 @@
-import { diasConClases, gastoDelMes, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen, resumenPorPersona } from '../shared/calc.ts';
+import { diasConClases, gastoDelMes, gastoTerminado, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen, resumenPorPersona } from '../shared/calc.ts';
 import type { Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
 import { deTipo, FRECUENCIAS } from './formularios.ts';
 import { Columnas, Ranking } from './Graficas.tsx';
 import { Icono } from './Icono.tsx';
 import { MontoInput } from './MontoInput.tsx';
 import type { Item, Store } from './store.ts';
-import { COLOR_MSI, colorDe, fmt, mesLargo, pct, textoReparto, textoSplit, usePref } from './ui.ts';
+import { COLOR_MSI, colorDe, fmt, mesLargo, pct, textoMeses, textoReparto, textoSplit, usePref } from './ui.ts';
 
 interface Props {
   real: Datos; // datos guardados
@@ -42,7 +42,9 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
     .map((g) => ({ ...g, items: real.ingresos.filter((x) => (x.categoria ?? '') === g.id) }))
     .filter((g) => g.items.length > 0);
 
-  const recortables = real.gastos.filter((g) => g.recortable);
+  // Los gastos de ciertos meses dejan de listarse cuando ya pasaron todos sus meses.
+  const gastos = real.gastos.filter((g) => !gastoTerminado(g, mes));
+  const recortables = gastos.filter((g) => g.recortable);
   const sobranteReal = resumen(real, mes, periodo).sobrante;
   const alternar = (id: string) =>
     setExcluidos(excluidos.includes(id) ? excluidos.filter((x) => x !== id) : [...excluidos, id]);
@@ -219,7 +221,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
               ))}
               {categoriasGasto.map((c) => (
                 <Categoria key={c.id} nombre={c.nombre} color={colorDe(c)} total={r.porCategoria[c.id] ?? 0}>
-                  {real.gastos.filter((g) => g.categoria === c.id).map((g) => {
+                  {gastos.filter((g) => g.categoria === c.id).map((g) => {
                     const fuera = excluidos.includes(g.id);
                     return (
                       <tr key={g.id} className={fuera ? 'off' : ''}>
@@ -243,6 +245,8 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                         <td>
                           {g.porDia ? (
                             `por día (${diasConClases(real, g.porDia.diasSemana, mes)} días este mes)`
+                          ) : g.meses ? (
+                            textoMeses(g.meses)
                           ) : (
                             <select
                               aria-label={`Frecuencia de ${g.nombre}`}

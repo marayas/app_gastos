@@ -3,6 +3,7 @@ import {
   diasConClases,
   difMeses,
   gastoDelMes,
+  gastoTerminado,
   ingresoDelMes,
   msiDelMes,
   msiRestanteTotal,
@@ -53,6 +54,32 @@ describe('gastos compartidos (split)', () => {
   it('respeta la frecuencia y nunca pasa del total', () => {
     expect(gastoDelMes(d, { ...base, frecuencia: 'anio', split: { personas: 2, tipo: 'monto', valor: 6000 } }, '2026-10')).toBe(500);
     expect(gastoDelMes(d, { ...base, split: { personas: 2, tipo: 'monto', valor: 99999 } }, '2026-10')).toBe(12000);
+  });
+});
+
+describe('gastos de ciertos meses', () => {
+  const unico = { id: 'u', nombre: 'Plomero', categoria: 'casa', monto: 3000, frecuencia: 'mes' as const, meses: ['2026-10'] };
+  const con = { ...d, gastos: [...d.gastos, unico] };
+  it('cuenta completo en su mes y nada en los demás', () => {
+    expect(gastoDelMes(d, unico, '2026-10')).toBe(3000);
+    expect(gastoDelMes(d, unico, '2026-09')).toBe(0);
+    expect(gastoDelMes(d, unico, '2026-11')).toBe(0);
+  });
+  it('baja el sobrante solo de ese mes y entra una vez en la vista anual', () => {
+    expect(resumen(con, '2026-10', 'mes').sobrante).toBeCloseTo(resumen(d, '2026-10', 'mes').sobrante - 3000, 2);
+    expect(resumen(con, '2026-11', 'mes').sobrante).toBeCloseTo(resumen(d, '2026-11', 'mes').sobrante, 2);
+    expect(resumen(con, '2026-10', 'anio').egresos).toBeCloseTo(resumen(d, '2026-10', 'anio').egresos + 3000, 2);
+  });
+  it('con varios meses cuenta completo en cada uno, aunque no sean seguidos', () => {
+    const varios = { ...unico, meses: ['2026-10', '2026-12', '2027-03'] };
+    expect(['2026-10', '2026-11', '2026-12', '2027-03', '2027-04'].map((m) => gastoDelMes(d, varios, m))).toEqual([3000, 0, 3000, 3000, 0]);
+    expect(resumen({ ...d, gastos: [...d.gastos, varios] }, '2026-10', 'anio').egresos).toBeCloseTo(resumen(d, '2026-10', 'anio').egresos + 9000, 2);
+    expect([gastoTerminado(varios, '2027-03'), gastoTerminado(varios, '2027-04'), gastoTerminado(d.gastos[0], '2030-01')]).toEqual([false, true, false]);
+  });
+  it('una cantidad fija del reparto se cobra una sola vez, no cada mes del año', () => {
+    const miembros = [{ id: 'm', nombre: 'Marco' }, { id: 'a', nombre: 'Ana' }];
+    const hogar = { ...d, miembros, gastos: [{ ...unico, reparto: { tipo: 'monto', de: 'a', valor: 1000 } as const }] };
+    expect(resumenPorPersona(hogar, '2026-10', 'anio').map((p) => p.egresos - resumenPorPersona({ ...hogar, gastos: [] }, '2026-10', 'anio').find((q) => q.persona.id === p.persona.id)!.egresos)).toEqual([2000, 1000]);
   });
 });
 

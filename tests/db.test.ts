@@ -36,6 +36,19 @@ describe('datos de un usuario', () => {
     expect(a.leerDatos().gastos.some((x) => x.id === id)).toBe(false);
   });
 
+  it('guarda y quita los meses de un gasto', () => {
+    const { a } = conAdmin();
+    const gasto = { nombre: 'Plomero', categoria: 'casa', monto: 3000, frecuencia: 'mes' };
+    const { id } = a.crear('gastos', { ...gasto, meses: ['2026-12', '2026-10', '2026-10'] });
+    const leer = () => a.leerDatos().gastos.find((x) => x.id === id) as Gasto;
+    expect(leer().meses).toEqual(['2026-10', '2026-12']);
+    a.actualizar('gastos', id, gasto);
+    expect(leer().meses).toBeUndefined();
+    a.actualizar('gastos', id, { ...gasto, meses: [] });
+    expect(leer().meses).toBeUndefined();
+    expect(() => a.crear('gastos', { ...gasto, meses: ['octubre'] })).toThrow();
+  });
+
   it('guarda y quita el split de un gasto', () => {
     const { a } = conAdmin();
     const gasto = { nombre: 'Renta', categoria: 'casa', monto: 12000, frecuencia: 'mes' };

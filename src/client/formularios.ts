@@ -1,8 +1,8 @@
-import { pagosRestantes, parteDeSplit, repartir, sumarMeses } from '../shared/calc.ts';
+import { pagosRestantes, parteDeSplit, rangoMeses, repartir, sumarMeses } from '../shared/calc.ts';
 import type { Categoria, Coleccion, CompraMSI, Gasto, Ingreso, Mes, Persona, Reparto, Split, TipoCategoria } from '../shared/tipos.ts';
-import { fmt, nuevoId } from './ui.ts';
+import { fmt, mesCorto, nuevoId } from './ui.ts';
 
-export type Valor = string | boolean | number[];
+export type Valor = string | boolean | number[] | string[];
 export type Valores = Record<string, Valor>;
 
 /** Valor del selector de categoría cuando se va a crear una nueva; el nombre va en `<campo>Nueva`. */
@@ -11,7 +11,7 @@ export const NUEVA = '__nueva__';
 export interface Campo {
   k: string;
   etiqueta: string;
-  tipo: 'texto' | 'numero' | 'entero' | 'mes' | 'fecha' | 'select' | 'check' | 'dias';
+  tipo: 'texto' | 'numero' | 'entero' | 'mes' | 'fecha' | 'select' | 'check' | 'dias' | 'meses';
   opcional?: boolean;
   opciones?: [string, string][];
   crear?: boolean; // el selector ofrece «+ Nueva categoría…»
@@ -136,6 +136,7 @@ function aForm(campos: Campo[], item: Record<string, unknown>): Valores {
     const x = item[c.k];
     if (c.tipo === 'check') v[c.k] = x === true;
     else if (c.tipo === 'dias') v[c.k] = Array.isArray(x) ? (x as number[]) : [];
+    else if (c.tipo === 'meses') v[c.k] = Array.isArray(x) ? (x as string[]) : [];
     else if (typeof x === 'number') v[c.k] = String(Math.round(x * 100) / 100);
     else v[c.k] = typeof x === 'string' ? x : '';
   }
@@ -147,7 +148,7 @@ function deForm(campos: Campo[], v: Valores, id: string) {
   for (const c of campos) {
     const x = v[c.k];
     if (c.tipo === 'numero' || c.tipo === 'entero') item[c.k] = Number(x);
-    else if (c.tipo === 'check' || c.tipo === 'dias') item[c.k] = x;
+    else if (c.tipo === 'check' || c.tipo === 'dias' || c.tipo === 'meses') item[c.k] = x;
     else if (x !== '') item[c.k] = (x as string).trim();
   }
   return item;
@@ -265,11 +266,21 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
     }
     case 'gastos': {
       const conSplit = (v: Valores) => v.split === true;
+      // El cobro por día de clases ya no se ofrece al capturar; un gasto que lo trae lo conserva.
+      const porDia = (origen as Gasto | null)?.porDia;
+      const porMeses = (v: Valores) => v.porMeses === true;
+      // Se ofrecen los próximos 12 meses, más los que el gasto ya tuviera fuera de ese rango.
+      const elegibles = [...new Set([...((origen as Gasto | null)?.meses ?? []), ...rangoMeses(mes, 12)])].sort();
       const campos: Campo[] = [
         { k: 'nombre', etiqueta: 'Concepto', tipo: 'texto' },
         campoCategoria(categorias, 'gasto'),
         { k: 'monto', etiqueta: 'Monto', tipo: 'numero' },
-        { k: 'frecuencia', etiqueta: 'Frecuencia', tipo: 'select', opciones: FRECUENCIAS },
+        { k: 'porMeses', etiqueta: 'Solo se paga en ciertos meses (no se repite cada mes)', tipo: 'check', si: () => !porDia },
+        {
+          k: 'meses', etiqueta: '¿En qué meses se paga?', tipo: 'meses', opciones: elegibles.map((m) => [m, mesCorto(m)]),
+          ayuda: 'El monto cuenta completo en cada mes marcado. Para un gasto único deja solo un mes.', si: porMeses,
+        },
+        { k: 'frecuencia', etiqueta: 'Frecuencia', tipo: 'select', opciones: FRECUENCIAS, si: (v) => !porMeses(v) },
         { k: 'nota', etiqueta: 'Nota', tipo: 'texto', opcional: true },
         ...camposReparto(hogar, '¿Quién lo paga?'),
         { k: 'recortable', etiqueta: 'Recortable (se puede quitar en un escenario)', tipo: 'check' },
@@ -282,8 +293,6 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
         },
         { k: 'splitPct', etiqueta: 'Porcentaje que te toca (%)', tipo: 'numero', max: 100, si: (v) => conSplit(v) && v.splitTipo === 'pct' },
       ];
-      // El cobro por día de clases ya no se ofrece al capturar; un gasto que lo trae lo conserva.
-      const porDia = (origen as Gasto | null)?.porDia;
       return {
         titulo: 'gasto',
         campos,
@@ -291,7 +300,7 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           const s = splitDeForm(v);
           const monto = Number(v.monto);
           if (!(monto > 0)) return null;
-          const frecuencia = porDia ? 'por día' : (FRECUENCIAS.find(([f]) => f === v.frecuencia)?.[1] ?? '');
+          const frecuencia = porDia ? 'por día' : porMeses(v) ? 'cada vez' : (FRECUENCIAS.find(([f]) => f === v.frecuencia)?.[1] ?? '');
           const parte = s ? parteDeSplit(s, monto) : monto;
           const lineas = [
             s && `${hogar.miembros.length > 1 ? 'Parte del hogar' : 'Tu parte'}: ${fmt(parte)} ${frecuencia} de ${fmt(monto)}`,
@@ -306,6 +315,8 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
             ...g,
             categoria: categoriaInicial(categorias, 'gasto', g?.categoria),
             monto: g?.porDia ? g.porDia.tarifa : g?.monto,
+            porMeses: !!g?.meses?.length,
+            meses: g?.meses?.length ? g.meses : [mes],
             split: !!g?.split,
             personas: g?.split?.personas ?? 2,
             splitTipo: g?.split?.tipo ?? 'iguales',
@@ -315,10 +326,11 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           });
         },
         deForm(v, id) {
-          const { split: _split, personas: _personas, splitTipo: _tipo, splitMonto: _monto, splitPct: _pct, ...g } = conReparto(deForm(campos, v, id), v, origen);
+          const { porMeses: _porMeses, meses, split: _split, personas: _personas, splitTipo: _tipo, splitMonto: _monto, splitPct: _pct, ...g } = conReparto(deForm(campos, v, id), v, origen);
           return {
             ...g,
             ...(porDia && { frecuencia: 'mes', porDia: { ...porDia, tarifa: g.monto } }),
+            ...(porMeses(v) && !porDia && { frecuencia: 'mes', meses }),
             ...(v.split === true && { split: splitDeForm(v) }),
           };
         },

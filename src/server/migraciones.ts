@@ -94,4 +94,8 @@ export const MIGRACIONES: string[] = [
   ALTER TABLE gastos ADD COLUMN reparto TEXT;
   ALTER TABLE compras_msi ADD COLUMN reparto TEXT;
   `,
+  // 6: gastos que solo se pagan en ciertos meses (uno o varios). Lista de meses en JSON; vacío = todos.
+  `
+  ALTER TABLE gastos ADD COLUMN meses TEXT;
+  `,
 ];

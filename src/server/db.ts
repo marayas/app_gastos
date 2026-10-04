@@ -14,7 +14,7 @@ export class ErrorPeticion extends Error {
   }
 }
 
-type Tipo = 'texto' | 'texto?' | 'numero' | 'entero' | 'bool' | 'mes' | 'mes?' | 'fecha' | 'frecuencia' | 'porDia?' | 'split?' | 'reparto?' | 'tipoCategoria';
+type Tipo = 'texto' | 'texto?' | 'numero' | 'entero' | 'bool' | 'mes' | 'mes?' | 'fecha' | 'frecuencia' | 'meses?' | 'porDia?' | 'split?' | 'reparto?' | 'tipoCategoria';
 type Celda = string | number | null;
 
 const COLECCIONES: Record<Coleccion, { tabla: string; campos: Record<string, Tipo> }> = {
@@ -23,7 +23,7 @@ const COLECCIONES: Record<Coleccion, { tabla: string; campos: Record<string, Tip
   gastos: {
     tabla: 'gastos',
     campos: {
-      nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia',
+      nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia', meses: 'meses?',
       recortable: 'bool', nota: 'texto?', porDia: 'porDia?', split: 'split?', reparto: 'reparto?',
     },
   },
@@ -73,6 +73,10 @@ function aCelda(tipo: Tipo, v: unknown, campo: string): Celda {
       return v === 'mes' || v === 'bimestre' || v === 'anio' ? v : falla();
     case 'tipoCategoria':
       return v === 'gasto' || v === 'ingreso' ? v : falla();
+    case 'meses?': {
+      if (!Array.isArray(v) || v.length > 60 || !v.every((m) => typeof m === 'string' && RE_MES.test(m))) return falla();
+      return v.length ? JSON.stringify([...new Set(v as string[])].sort()) : null;
+    }
     case 'porDia?': {
       const p = v as { tarifa?: unknown; diasSemana?: unknown };
       const ok =
@@ -106,7 +110,7 @@ function aCelda(tipo: Tipo, v: unknown, campo: string): Celda {
 function deCelda(tipo: Tipo, v: unknown): unknown {
   if (tipo === 'bool') return v === 1 ? true : undefined;
   if (v === null) return undefined;
-  return tipo === 'porDia?' || tipo === 'split?' || tipo === 'reparto?' ? JSON.parse(v as string) : v;
+  return tipo === 'meses?' || tipo === 'porDia?' || tipo === 'split?' || tipo === 'reparto?' ? JSON.parse(v as string) : v;
 }
 
 function nombreValido(v: unknown): string {

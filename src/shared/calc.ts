@@ -42,7 +42,14 @@ export function parteDeSplit(s: Split, total: number): number {
   return Math.min(s.valor ?? 0, total);
 }
 
+/** Un gasto con meses elegidos solo cuenta en ellos; los demás, todos los meses. */
+export const gastoVigente = (g: Gasto, mes: Mes): boolean => !g.meses?.length || g.meses.includes(mes);
+
+/** Ya pasaron todos los meses en que se pagaba. */
+export const gastoTerminado = (g: Gasto, mes: Mes): boolean => !!g.meses?.length && g.meses.every((m) => m < mes);
+
 export function gastoDelMes(cal: Calendario, g: Gasto, mes: Mes): number {
+  if (!gastoVigente(g, mes)) return 0;
   if (g.porDia) {
     const total = g.porDia.tarifa * diasConClases(cal, g.porDia.diasSemana, mes);
     return g.split ? parteDeSplit(g.split, total) : total;
@@ -172,7 +179,7 @@ export function resumenPorPersona(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): 
   }
   for (const g of d.gastos) {
     const total = meses.reduce((s, m) => s + gastoDelMes(d, g, m), 0);
-    sumar(egresos, repartir(g.reparto, total, miembros, FACTOR[g.frecuencia] * meses.length));
+    sumar(egresos, repartir(g.reparto, total, miembros, FACTOR[g.frecuencia] * meses.filter((m) => gastoVigente(g, m)).length));
   }
   for (const c of d.msi) {
     const pagos = periodo === 'mes' ? (msiActiva(c, mes) ? 1 : 0) : pagosRestantes(c, mes);

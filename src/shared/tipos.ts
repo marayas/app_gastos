@@ -49,6 +49,7 @@ export interface Gasto {
   categoria: string;
   monto: number;
   frecuencia: Frecuencia;
+  meses?: Mes[]; // solo se paga en esos meses, completo cada vez; vacío = todos los meses
   recortable?: boolean;
   nota?: string;
   porDia?: {

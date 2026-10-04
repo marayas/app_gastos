@@ -49,6 +49,26 @@ export function Dialogo({ form, item, onGuardar, onBorrar, onCerrar }: Props) {
         </fieldset>
       );
     }
+    if (c.tipo === 'meses') {
+      const elegidos = v[c.k] as string[];
+      return (
+        <fieldset key={c.k} className="dias">
+          <legend>{c.etiqueta}</legend>
+          {c.opciones!.map(([m, nombre]) => (
+            <label key={m} className="check">
+              <input
+                type="checkbox"
+                checked={elegidos.includes(m)}
+                required={elegidos.length === 0} // al menos un mes
+                onChange={(e) => set(c.k, e.target.checked ? [...elegidos, m].sort() : elegidos.filter((x) => x !== m))}
+              />
+              {nombre}
+            </label>
+          ))}
+          {c.ayuda && <small>{c.ayuda}</small>}
+        </fieldset>
+      );
+    }
     const valor = v[c.k] as string;
     let control;
     if (c.tipo === 'select') {

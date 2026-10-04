@@ -19,6 +19,9 @@ const fechaDeMes = (m: Mes) => {
 export const mesLargo = (m: Mes) => fechaDeMes(m).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
 export const mesCorto = (m: Mes) => fechaDeMes(m).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' });
 
+/** "solo en octubre de 2026" o "solo en oct 26, dic 26" */
+export const textoMeses = (meses: Mes[]) => 'solo en ' + (meses.length === 1 ? mesLargo(meses[0]) : meses.map(mesCorto).join(', '));
+
 export function fechaLarga(f: string): string {
   const [y, mo, d] = f.split('-').map(Number);
   return new Date(y, mo - 1, d).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });

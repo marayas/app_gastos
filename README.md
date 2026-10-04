@@ -7,6 +7,7 @@ Dashboard de presupuesto familiar (México, MXN): cuánto entra, cuánto se paga
 - **Resumen:** ingresos, egresos y sobrante del mes o de los próximos 12 meses, con el desglose por categoría y el detalle de cada concepto.
 - **Liquidez por mes:** una gráfica con lo que queda libre cada mes. Al tocar un mes se despliega su detalle: ingresos, gastos fijos, meses sin intereses y liquidez.
 - **Pagos:** la lista de lo que hay que pagar en el mes, para irlo marcando, y el avance de las compras a meses sin intereses.
+- **Gastos de ciertos meses:** al capturar un gasto puedes marcar «Solo se paga en ciertos meses» y elegir cuáles, entre los próximos 12: uno solo para un gasto único, o varios aunque no sean seguidos. El monto cuenta completo en cada mes elegido y nada en los demás. En Pagos sale aparte el mes que toca, y deja de listarse cuando ya pasó su último mes.
 - **Escenarios:** un gasto marcado como «recortable» se puede quitar de las cuentas sin borrarlo, para ver cómo cambia el sobrante.
 - **Reparto del hogar:** cuando dos o más personas comparten el hogar (ver «Usuarios»), cada ingreso dice de quién es y cada gasto o compra a MSI quién lo paga. Por defecto va en partes iguales; se puede poner «solo» una persona, o que una ponga un porcentaje o una cantidad y el resto los demás. El Resumen muestra por persona lo que gana, lo que le toca aportar y lo que le queda.
 - **Split:** un gasto que se comparte con gente de fuera del hogar (por ejemplo, una renta entre tres) se captura por el total, diciendo entre cuántas personas se divide y qué parte toca: partes iguales, una cantidad o un porcentaje. En las cuentas solo entra esa parte.
@@ -71,6 +72,7 @@ La app incluye un servidor **MCP** de solo lectura en `/mcp`, para que un asiste
 Herramientas disponibles: `resumen`, `liquidez_proyectada`, `ingresos`, `gastos`, `meses_sin_intereses` y `pagos_del_mes`. Todas devuelven montos ya calculados y aceptan un `mes` opcional (`AAAA-MM`).
 
 - Un token solo ve los datos de su dueño, o los del hogar que comparte, y **no puede modificar nada**. Con varias personas en el hogar, `resumen` incluye lo que le toca a cada una y `gastos` cuánto paga cada quien.
+- En `gastos`, el campo `soloEnMeses` trae los meses de un gasto que no se repite cada mes; fuera de ellos su costo es 0.
 - Se revoca desde la misma pantalla; cambiar la contraseña revoca todos los tokens del usuario.
 - El mismo token sirve para la API de lectura: `GET /api/resumen`, `/api/liquidez`, `/api/estado` y `/api/exportar`.
 - La autenticación es por token fijo. Los clientes que solo aceptan conectores con OAuth necesitarían un flujo OAuth que la app todavía no tiene.

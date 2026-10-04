@@ -73,7 +73,7 @@ const HERRAMIENTAS: Herramienta[] = [
     name: 'gastos',
     title: 'Lista de gastos',
     description:
-      'Gastos y ahorros registrados, ordenados por lo que cuestan en el mes. Se puede filtrar por nombre de categoría (por ejemplo "Suscripciones"). Incluye cuáles están marcados como recortables y, si el hogar tiene varios miembros, cuánto le toca pagar a cada uno.',
+      'Gastos y ahorros registrados, ordenados por lo que cuestan en el mes. Se puede filtrar por nombre de categoría (por ejemplo "Suscripciones"). Incluye cuáles se pagan solo en ciertos meses (soloEnMeses; fuera de ellos cuestan 0), cuáles están marcados como recortables y, si el hogar tiene varios miembros, cuánto le toca pagar a cada uno.',
     inputSchema: {
       type: 'object',
       properties: { mes: MES, categoria: { type: 'string', description: 'Nombre exacto de la categoría para filtrar. Opcional.' } },
