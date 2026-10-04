@@ -4,6 +4,7 @@ import { Acceso } from './Acceso.tsx';
 import { Cuenta } from './Cuenta.tsx';
 import { DatosTab } from './DatosTab.tsx';
 import { Dialogo } from './Dialogo.tsx';
+import { Icono } from './Icono.tsx';
 import { deTipo, formulario, NUEVA, nuevaCategoria, type Valores } from './formularios.ts';
 import { Pagos } from './Pagos.tsx';
 import { Resumen } from './Resumen.tsx';
@@ -11,10 +12,10 @@ import { api, mensaje, SIN_SESION, useDatos, type Item } from './store.ts';
 import { mesLargo, nuevoId, usePref } from './ui.ts';
 
 const TABS = [
-  ['resumen', 'Resumen'],
-  ['pagos', 'Pagos mensuales'],
-  ['datos', 'Datos'],
-  ['cuenta', 'Cuenta'],
+  ['resumen', 'Resumen', 'Tu dinero, de un vistazo'],
+  ['pagos', 'Pagos', 'Pagos del mes'],
+  ['datos', 'Datos', 'Tus datos'],
+  ['cuenta', 'Cuenta', 'Tu cuenta'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -22,7 +23,17 @@ type Tab = (typeof TABS)[number][0];
 const simulada = new URLSearchParams(location.search).get('hoy');
 const HOY_SIMULADO = simulada && /^\d{4}-\d{2}-\d{2}$/.test(simulada) ? simulada : null;
 
+type Tema = 'auto' | 'light' | 'dark';
+
 export function App() {
+  const [tema, setTema] = usePref<Tema>('tema', 'auto');
+  useEffect(() => {
+    if (tema === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = tema;
+  }, [tema]);
+  const oscuro = tema === 'dark' || (tema === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const alternarTema = () => setTema(oscuro ? 'light' : 'dark');
+
   const [sesion, setSesion] = useState<Sesion | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,10 +54,17 @@ export function App() {
 
   const salir = () => api('POST', '/api/salir').finally(revisar);
   // key: al cambiar de usuario se descarta todo el estado del anterior.
-  return <Panel key={sesion.usuario.id} usuario={sesion.usuario} onSalir={salir} />;
+  return <Panel key={sesion.usuario.id} usuario={sesion.usuario} onSalir={salir} oscuro={oscuro} onTema={alternarTema} />;
 }
 
-function Panel({ usuario, onSalir }: { usuario: Usuario; onSalir(): void }) {
+interface PanelProps {
+  usuario: Usuario;
+  onSalir(): void;
+  oscuro: boolean;
+  onTema(): void;
+}
+
+function Panel({ usuario, onSalir, oscuro, onTema }: PanelProps) {
   const store = useDatos();
   const { estado, error } = store;
   const [tab, setTab] = usePref<Tab>('tab', 'resumen');
@@ -86,23 +104,37 @@ function Panel({ usuario, onSalir }: { usuario: Usuario; onSalir(): void }) {
     store.guardar(col, item);
   }
 
-  return (
-    <main>
-      <div className="top">
-        <h1>Finanzas familiares</h1>
-        <button className="ghost" onClick={onSalir}>Salir</button>
-      </div>
-      <p className="sub">
-        {usuario.nombre} · <span className="cap">{mesLargo(mes)}</span>
-        {HOY_SIMULADO && <span className="flag">fecha simulada</span>} · Los cambios se guardan solos.
-      </p>
-      {error && <p className="banner" role="alert">{error}</p>}
+  const titulo = TABS.find(([id]) => id === tab)![2];
 
-      <div className="tabs" role="tablist" aria-label="Secciones">
-        {TABS.map(([id, nombre]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{nombre}</button>
-        ))}
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand"><span className="logo"><Icono n="marca" s={16} /></span>Finanzas</div>
+        <nav className="nav" role="tablist" aria-label="Secciones">
+          {TABS.map(([id, nombre]) => (
+            <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+              <Icono n={id} />{nombre}
+            </button>
+          ))}
+        </nav>
+        <div className="user">
+          <button className="iconbtn" onClick={onTema} aria-label={oscuro ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}>
+            <Icono n={oscuro ? 'sol' : 'luna'} />
+          </button>
+          <span className="chip">{usuario.nombre}</span>
+          <button className="iconbtn" onClick={onSalir} aria-label="Salir"><Icono n="salir" /></button>
+        </div>
+      </header>
+
+      <main>
+      <div className="pagehead">
+        <p className="eyebrow">
+          {mesLargo(mes)}
+          {HOY_SIMULADO && <span className="flag">fecha simulada</span>}
+        </p>
+        <h1>{tab === 'resumen' ? <>Hola, {usuario.nombre}.</> : titulo}</h1>
       </div>
+      {error && <p className="banner" role="alert">{error}</p>}
 
       {tab === 'resumen' && (
         <Resumen real={estado} datos={datos} mes={mes} excluidos={excluidos} setExcluidos={setExcluidos} store={store} abrir={abrir} />
@@ -128,6 +160,7 @@ function Panel({ usuario, onSalir }: { usuario: Usuario; onSalir(): void }) {
           }
         />
       )}
-    </main>
+      </main>
+    </div>
   );
 }

@@ -7,6 +7,9 @@ services:
       - "8080:8080"
     environment:
       TZ: America/Mexico_City
+      # Al exponerla por internet detrás de un proxy con HTTPS (ver README):
+      # COOKIE_SECURE: "1"
+      # TRUST_PROXY: "1"
     volumes:
       - finanzas-data:/data
 

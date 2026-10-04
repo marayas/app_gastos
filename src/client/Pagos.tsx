@@ -11,6 +11,7 @@ import {
   ultimoMesMSI,
 } from '../shared/calc.ts';
 import type { Coleccion, CompraMSI, Datos, Gasto, Mes } from '../shared/tipos.ts';
+import { Anillo, Columnas } from './Graficas.tsx';
 import type { Item, Store } from './store.ts';
 import { COLOR_MSI, colorDe, fmt, mesCorto, mesLargo } from './ui.ts';
 
@@ -71,6 +72,7 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
       <Fila
         key={c.id} id={c.id} nombre={c.nombre} color={COLOR_MSI} monto={c.pagoMensual}
         pagado={pagado.has(c.id)} onMarcar={activa ? (v) => store.marcar(mes, c.id, v) : undefined} onEditar={() => abrir('msi', c)}
+        progreso={(c.plazoTotal - k) / c.plazoTotal}
         detalle={
           k === 0
             ? `Terminó en ${mesLargo(finMSI(c))}`
@@ -82,31 +84,25 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
 
   return (
     <>
-      <section className="kpis" aria-label="Resumen de pagos del mes">
-        <div className="kpi wide">
-          <div className="l">Por pagar en {mesLargo(mes)}</div>
-          <div className="num">{fmt(total)}</div>
-          <div className="n">Incluye ahorros, apartados y MSI</div>
+      <section className="hero pay" aria-label="Resumen de pagos del mes">
+        <Anillo valor={total ? hecho / total : 0} etiqueta="Avance de pagos del mes" />
+        <div className="hero-main">
+          <p className="eyebrow">Por pagar en {mesLargo(mes)}</p>
+          <p className="hero-num">{fmt(total)}</p>
+          <p className="hero-sub">Incluye ahorros, apartados y MSI. Las casillas empiezan vacías cada mes.</p>
         </div>
-        <div className="kpi in"><div className="l">Pagado</div><div className="num">{fmt(hecho)}</div></div>
-        <div className="kpi out"><div className="l">Pendiente</div><div className="num">{fmt(total - hecho)}</div></div>
-      </section>
-
-      <div className="panel">
-        <div className="prog" role="progressbar" aria-label="Avance de pagos del mes" aria-valuemin={0} aria-valuemax={100} aria-valuenow={total ? Math.round((hecho / total) * 100) : 0}>
-          <i style={{ width: `${total ? (hecho / total) * 100 : 0}%` }} />
-        </div>
-        <div className="rowbtn">
-          <span className="note first">Marca cada pago cuando lo hagas. Las casillas empiezan vacías cada mes.</span>
+        <div className="hero-stats">
+          <div><span className="eyebrow">Pagado</span><b>{fmt(hecho)}</b></div>
+          <div><span className="eyebrow">Pendiente</span><b>{fmt(total - hecho)}</b></div>
           <button
-            className="ghost"
+            className="ghost onhero"
             disabled={pagado.size === 0}
             onClick={() => confirm(`¿Desmarcar todos los pagos de ${mesLargo(mes)}?`) && store.reiniciarMes(mes)}
           >
             Reiniciar mes
           </button>
         </div>
-      </div>
+      </section>
 
       <section className="panel">
         <h2>Liquidez mensual</h2>
@@ -118,6 +114,7 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
             : 'No hay compras a MSI pendientes.'}
           {datos !== real && ' Incluye el escenario de recortes activo.'}
         </p>
+        <Columnas filas={filas} grande />
         <div className="tablewrap">
           <table className="compact">
             <thead>
@@ -211,17 +208,22 @@ interface FilaProps {
   monto: number;
   pagado: boolean;
   onMarcar?(v: boolean): void; // sin casilla si no se paga este mes
+  progreso?: number; // 0..1, parte ya pagada de una compra a MSI
   onEditar(): void;
 }
 
-function Fila({ id, nombre, detalle, color, monto, pagado, onMarcar, onEditar }: FilaProps) {
+function Fila({ id, nombre, detalle, color, monto, pagado, onMarcar, onEditar, progreso }: FilaProps) {
   return (
     <div className={'prow' + (pagado && onMarcar ? ' done' : '')}>
       {onMarcar
         ? <input type="checkbox" id={'p-' + id} checked={pagado} onChange={(e) => onMarcar(e.target.checked)} />
         : <span />}
       <span className="dot" style={{ background: color }} />
-      <label htmlFor={'p-' + id} className="pn">{nombre}<small>{detalle}</small></label>
+      <label htmlFor={'p-' + id} className="pn">
+        {nombre}
+        <small>{detalle}</small>
+        {progreso !== undefined && <span className="track thin"><i className="grow out" style={{ width: `${progreso * 100}%` }} /></span>}
+      </label>
       <span className="amt">{fmt(monto)}</span>
       <button className="icon" aria-label={`Editar ${nombre}`} onClick={onEditar}>✎</button>
     </div>

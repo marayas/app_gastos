@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Usuario } from '../shared/tipos.ts';
+import type { TokenApi, Usuario } from '../shared/tipos.ts';
 import { api, mensaje } from './store.ts';
 
 type Aviso = { ok: boolean; texto: string } | null;
@@ -42,8 +42,89 @@ export function Cuenta({ usuario }: { usuario: Usuario }) {
           <div className="actions"><button type="submit" className="primary">Cambiar contraseña</button></div>
         </form>
       </section>
+      <Tokens />
       {usuario.rol === 'admin' && <Usuarios />}
     </>
+  );
+}
+
+const fecha = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : 'nunca';
+
+/** Tokens de solo lectura para conectar un asistente (LLM) por MCP o por la API. */
+function Tokens() {
+  const [lista, setLista] = useState<TokenApi[]>([]);
+  const [nombre, setNombre] = useState('');
+  const [nuevo, setNuevo] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<Aviso>(null);
+  const url = `${location.origin}/mcp`;
+
+  const cargar = () => api<TokenApi[]>('GET', '/api/tokens').then(setLista);
+  useEffect(() => {
+    cargar().catch((err) => setAviso({ ok: false, texto: mensaje(err) }));
+  }, []);
+
+  async function crear(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      const creado = await api<TokenApi & { token: string }>('POST', '/api/tokens', { nombre });
+      setNuevo(creado.token);
+      setNombre('');
+      setAviso(null);
+      await cargar();
+    } catch (err) {
+      setAviso({ ok: false, texto: mensaje(err) });
+    }
+  }
+
+  async function revocar(t: TokenApi) {
+    if (!confirm(`¿Revocar el token «${t.nombre}»? El asistente que lo use dejará de tener acceso.`)) return;
+    try {
+      await api('DELETE', `/api/tokens/${t.id}`);
+      setNuevo(null);
+      await cargar();
+    } catch (err) {
+      setAviso({ ok: false, texto: mensaje(err) });
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>Acceso para asistentes (LLM)</h2>
+      <p className="note first">
+        Un token deja que un asistente consulte <b>tus</b> datos en modo de solo lectura: no puede cambiar nada ni ver a otros usuarios.
+        Se conecta por MCP en <code>{url}</code>, mandando el token en la cabecera <code>Authorization: Bearer …</code>.
+        Cambiar tu contraseña revoca todos tus tokens.
+      </p>
+      {lista.map((t) => (
+        <div key={t.id} className="lrow">
+          <span className="pn">{t.nombre}<small>Creado el {fecha(t.creado)} · último uso: {fecha(t.ultimoUso)}</small></span>
+          <button className="ghost danger" onClick={() => revocar(t)}>Revocar</button>
+        </div>
+      ))}
+      {nuevo && (
+        <div className="secret" role="status">
+          <p className="note first"><b>Copia el token ahora.</b> No se vuelve a mostrar.</p>
+          <code>{nuevo}</code>
+          <div className="btns">
+            <button className="ghost" onClick={() => navigator.clipboard?.writeText(nuevo)}>Copiar token</button>
+            <button className="ghost" onClick={() => navigator.clipboard?.writeText(`claude mcp add --transport http finanzas ${url} --header "Authorization: Bearer ${nuevo}"`)}>
+              Copiar comando para Claude Code
+            </button>
+          </div>
+        </div>
+      )}
+      <h3>Crear token</h3>
+      <form onSubmit={crear} style={{ marginTop: 10 }}>
+        <div className="field">
+          <label htmlFor="t-nombre">Nombre</label>
+          <input id="t-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required maxLength={60} placeholder="Claude en mi Mac" autoComplete="off" />
+          <small>Para reconocerlo después, por ejemplo el asistente o el dispositivo que lo usa.</small>
+        </div>
+        <Mensaje aviso={aviso} />
+        <div className="actions"><button type="submit" className="primary">Crear token</button></div>
+      </form>
+    </section>
   );
 }
 

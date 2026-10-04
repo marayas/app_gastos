@@ -71,4 +71,15 @@ export const MIGRACIONES: string[] = [
       ('renta', 'Rentas', 'c6', 104), ('otros-ingresos', 'Otros ingresos', 'c5', 105)) c;
   UPDATE ingresos SET categoria = 'otros-ingresos' WHERE categoria IS NULL;
   `,
+  // 3: tokens de acceso de solo lectura para asistentes (API y MCP). Solo se guarda el hash.
+  `
+  CREATE TABLE tokens_api (
+    id TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    nombre TEXT NOT NULL,
+    hash TEXT NOT NULL UNIQUE,
+    creado TEXT NOT NULL,
+    ultimo_uso TEXT
+  );
+  `,
 ];

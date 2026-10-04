@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Coleccion, Datos, PagoMarcado, Rol, Usuario } from '../shared/tipos.ts';
-import { CLAVE_FALSA, claveCorrecta, hashClave, hashToken, nuevoToken } from './auth.ts';
+import type { Coleccion, Datos, PagoMarcado, Rol, TokenApi, Usuario } from '../shared/tipos.ts';
+import { CLAVE_FALSA, claveCorrecta, hashClave, hashToken, nuevoToken, nuevoTokenApi } from './auth.ts';
 import { MIGRACIONES } from './migraciones.ts';
 
 export class ErrorPeticion extends Error {
@@ -303,11 +303,45 @@ export function abrirAlmacen(ruta: string) {
       return { id: fila.id, nombre: fila.nombre, rol: fila.rol };
     },
 
-    /** Cambia la contraseña y cierra las demás sesiones del usuario. */
+    /** Cambia la contraseña, cierra las demás sesiones del usuario y revoca sus tokens de acceso. */
     cambiarClave(id: string, nueva: unknown, conservarToken?: string) {
       const hash = hashClave(claveValida(nueva));
       if (!db.prepare('UPDATE usuarios SET clave = ? WHERE id = ?').run(hash, id).changes) throw new ErrorPeticion('No existe', 404);
       db.prepare('DELETE FROM sesiones WHERE usuario_id = ? AND token != ?').run(id, conservarToken ? hashToken(conservarToken) : '');
+      db.prepare('DELETE FROM tokens_api WHERE usuario_id = ?').run(id);
+    },
+
+    /** El token completo solo existe en esta respuesta: en la base queda su hash. */
+    crearTokenApi(usuarioId: string, nombre: unknown): TokenApi & { token: string } {
+      const etiqueta = typeof nombre === 'string' ? nombre.trim() : '';
+      if (etiqueta.length < 1 || etiqueta.length > 60) throw new ErrorPeticion('Ponle un nombre al token (hasta 60 caracteres)');
+      const cuantos = db.prepare('SELECT count(*) AS n FROM tokens_api WHERE usuario_id = ?').get(usuarioId) as { n: number };
+      if (cuantos.n >= 10) throw new ErrorPeticion('Ya tienes 10 tokens; revoca alguno antes de crear otro');
+      const token = nuevoTokenApi();
+      const fila = { id: randomUUID(), nombre: etiqueta, creado: new Date().toISOString() };
+      db.prepare('INSERT INTO tokens_api (id, usuario_id, nombre, hash, creado) VALUES (?, ?, ?, ?, ?)').run(
+        fila.id, usuarioId, fila.nombre, hashToken(token), fila.creado,
+      );
+      return { ...fila, ultimoUso: null, token };
+    },
+
+    listarTokensApi: (usuarioId: string) =>
+      db
+        .prepare('SELECT id, nombre, creado, ultimo_uso AS ultimoUso FROM tokens_api WHERE usuario_id = ? ORDER BY rowid')
+        .all(usuarioId) as unknown as TokenApi[],
+
+    borrarTokenApi(usuarioId: string, id: string) {
+      if (!db.prepare('DELETE FROM tokens_api WHERE usuario_id = ? AND id = ?').run(usuarioId, id).changes) throw new ErrorPeticion('No existe', 404);
+    },
+
+    usuarioDeTokenApi(token: string): Usuario | null {
+      const hash = hashToken(token);
+      const fila = db
+        .prepare('SELECT u.id, u.nombre, u.rol FROM tokens_api t JOIN usuarios u ON u.id = t.usuario_id WHERE t.hash = ?')
+        .get(hash) as unknown as Usuario | undefined;
+      if (!fila) return null;
+      db.prepare('UPDATE tokens_api SET ultimo_uso = ? WHERE hash = ?').run(new Date().toISOString(), hash);
+      return { id: fila.id, nombre: fila.nombre, rol: fila.rol };
     },
 
     borrarUsuario(id: string) {

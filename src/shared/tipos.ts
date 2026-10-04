@@ -92,3 +92,11 @@ export interface Sesion {
   usuario: Usuario | null;
   requiereConfiguracion: boolean; // aún no existe ningún usuario
 }
+
+/** Token de acceso de solo lectura para un asistente (API y MCP). */
+export interface TokenApi {
+  id: string;
+  nombre: string;
+  creado: string;
+  ultimoUso: string | null;
+}

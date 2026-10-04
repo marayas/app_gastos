@@ -20,6 +20,14 @@ export const nuevoToken = () => randomBytes(32).toString('hex');
 /** En la base solo se guarda el hash del token: una copia de la base no sirve para entrar. */
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
+export const PREFIJO_TOKEN = 'fin_';
+export const nuevoTokenApi = () => PREFIJO_TOKEN + randomBytes(32).toString('hex');
+
+export function tokenBearer(cabecera: string | undefined): string | null {
+  const m = cabecera?.match(/^Bearer (fin_[0-9a-f]{64})$/);
+  return m ? m[1] : null;
+}
+
 export function cookieSesion(cabecera: string | undefined): string | null {
   const m = cabecera?.match(/(?:^|;\s*)sesion=([0-9a-f]{64})(?:;|$)/);
   return m ? m[1] : null;

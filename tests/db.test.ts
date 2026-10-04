@@ -180,3 +180,36 @@ describe('usuarios y segregación', () => {
     expect(a.leerDatos().gastos).toHaveLength(EJEMPLO.gastos.length);
   });
 });
+
+describe('tokens de acceso', () => {
+  it('se crean, autentican a su dueño y se revocan', () => {
+    const { almacen, admin } = conAdmin();
+    const { token, id } = almacen.crearTokenApi(admin.id, 'Claude en mi Mac');
+    expect(token).toMatch(/^fin_[0-9a-f]{64}$/);
+    expect(almacen.usuarioDeTokenApi(token)).toEqual(admin);
+    expect(almacen.usuarioDeTokenApi('fin_' + '0'.repeat(64))).toBeNull();
+
+    const [listado] = almacen.listarTokensApi(admin.id);
+    expect(listado).toMatchObject({ id, nombre: 'Claude en mi Mac' });
+    expect(listado.ultimoUso).not.toBeNull();
+    expect(JSON.stringify(listado)).not.toContain(token); // el listado nunca devuelve el secreto
+
+    almacen.borrarTokenApi(admin.id, id);
+    expect(almacen.usuarioDeTokenApi(token)).toBeNull();
+  });
+
+  it('cada quien administra solo los suyos, y se revocan al cambiar la contraseña o borrar al usuario', () => {
+    const { almacen, admin } = conAdmin();
+    const ana = almacen.crearUsuario('Ana', 'secreto-largo', 'usuario', SEMILLA_BASE);
+    const deAdmin = almacen.crearTokenApi(admin.id, 'a');
+    const deAna = almacen.crearTokenApi(ana.id, 'b');
+    expect(almacen.listarTokensApi(ana.id).map((t) => t.id)).toEqual([deAna.id]);
+    expect(() => almacen.borrarTokenApi(ana.id, deAdmin.id)).toThrow('No existe');
+    expect(() => almacen.crearTokenApi(ana.id, '')).toThrow();
+
+    almacen.cambiarClave(admin.id, 'otra-clave-larga');
+    expect(almacen.usuarioDeTokenApi(deAdmin.token)).toBeNull();
+    almacen.borrarUsuario(ana.id);
+    expect(almacen.usuarioDeTokenApi(deAna.token)).toBeNull();
+  });
+});

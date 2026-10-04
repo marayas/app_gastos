@@ -1,6 +1,8 @@
-import { diasConClases, gastoDelMes, ingresoVigente, msiRestanteTotal, pagosRestantes, rangoMeses, resumen } from '../shared/calc.ts';
+import { diasConClases, gastoDelMes, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen } from '../shared/calc.ts';
 import type { Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes } from '../shared/tipos.ts';
 import { deTipo, FRECUENCIAS } from './formularios.ts';
+import { Columnas, Ranking } from './Graficas.tsx';
+import { Icono } from './Icono.tsx';
 import { MontoInput } from './MontoInput.tsx';
 import type { Item, Store } from './store.ts';
 import { COLOR_MSI, colorDe, fmt, mesLargo, pct, usePref } from './ui.ts';
@@ -47,50 +49,66 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
 
   const totalGasto = (g: Gasto) => meses.reduce((s, m) => s + gastoDelMes(real, g, m), 0);
   const msiPendientes = real.msi.filter((c) => pagosRestantes(c, mes) > 0);
-  const vs: [string, number, string][] = [
-    ['Ingresos', r.ingresos, 'var(--in)'],
-    ['Egresos', r.egresos, 'var(--out)'],
-    ['Sobrante', Math.max(r.sobrante, 0), 'var(--free-solid)'],
-  ];
+  const usado = r.ingresos ? r.egresos / r.ingresos : 0;
 
   return (
     <>
-      <div className="rowbtn barra">
+      <div className="toolbar">
         <div className="seg" role="group" aria-label="Periodo">
           <button aria-pressed={!anual} onClick={() => setPeriodo('mes')}>Por mes</button>
           <button aria-pressed={anual} onClick={() => setPeriodo('anio')}>Por año</button>
         </div>
         <span className="btns">
-          <button className="ghost" onClick={() => abrir('ingresos', null)}>+ Ingreso</button>
-          <button className="ghost" onClick={() => abrir('gastos', null)}>+ Gasto</button>
-          <button className="ghost" onClick={() => abrir('msi', null)}>+ MSI</button>
+          <button className="add" onClick={() => abrir('ingresos', null)}><Icono n="mas" s={16} />Ingreso</button>
+          <button className="add" onClick={() => abrir('gastos', null)}><Icono n="mas" s={16} />Gasto</button>
+          <button className="add" onClick={() => abrir('msi', null)}><Icono n="mas" s={16} />MSI</button>
         </span>
       </div>
 
+      <section className="hero" aria-label="Sobrante">
+        <div className="hero-main">
+          <p className="eyebrow">Sobrante {anual ? 'de los próximos 12 meses' : `de ${mesLargo(mes)}`}</p>
+          <p className="hero-num">{fmt(r.sobrante)}</p>
+          <div className="meter" role="img" aria-label={`Usas ${pct(r.egresos, r.ingresos)} de tu ingreso`}>
+            <i className="grow" style={{ width: `${Math.min(usado, 1) * 100}%` }} />
+          </div>
+          <p className="hero-sub">
+            {r.ingresos === 0
+              ? 'Agrega tus ingresos y gastos para ver cuánto te queda.'
+              : r.sobrante < 0
+                ? <>Tus egresos rebasan tu ingreso por <b>{fmt(-r.sobrante)}</b>.</>
+                : <>Usas <b>{pct(r.egresos, r.ingresos)}</b> de tu ingreso y te queda <b>{pct(r.sobrante, r.ingresos)}</b> libre.</>}
+          </p>
+        </div>
+        <div className="hero-side">
+          <p className="eyebrow">Liquidez de los próximos meses</p>
+          <Columnas filas={proyeccion(datos, mes).slice(0, 10)} />
+        </div>
+      </section>
+
       <section className="kpis" aria-label="Resumen">
-        <div className="kpi in">
+        <div className="kpi">
+          <span className="ibox"><Icono n="entra" /></span>
           <div className="l">Ingresos</div>
           <div className="num">{fmt(r.ingresos)}</div>
           <div className="n">{anual ? 'Próximos 12 meses' : mesLargo(mes)}</div>
         </div>
-        <div className="kpi out">
+        <div className="kpi">
+          <span className="ibox"><Icono n="sale" /></span>
           <div className="l">Egresos</div>
           <div className="num">{fmt(r.egresos)}</div>
           <div className="n">{pct(r.egresos, r.ingresos)} del ingreso</div>
         </div>
-        <div className="kpi">
-          <div className="l">Sobrante</div>
-          <div className={'num' + (r.sobrante < 0 ? ' neg' : '')}>{fmt(r.sobrante)}</div>
-          <div className="n">{pct(r.sobrante, r.ingresos)} del ingreso</div>
-        </div>
         {r.porCategoria.terreno ? (
           <div className="kpi">
+            <span className="ibox"><Icono n="meta" /></span>
             <div className="l">Sin terreno</div>
             <div className="num">{fmt(r.egresos - r.porCategoria.terreno)}</div>
             <div className="n">Egresos sin el descuento</div>
           </div>
         ) : (
           <div className="kpi">
+            <span className="ibox"><Icono n="pagos" /></span>
             <div className="l">MSI por pagar</div>
             <div className="num">{fmt(msiRestanteTotal(real, mes))}</div>
             <div className="n">Total de pagos restantes</div>
@@ -98,98 +116,48 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
         )}
       </section>
 
-      <section className="panel">
-        <h2>De dónde viene el ingreso</h2>
-        {fuentes.length === 0 ? (
-          <p className="note first">Aún no hay ingresos {anual ? 'en los próximos 12 meses' : 'este mes'}. Agrega uno con «+ Ingreso».</p>
-        ) : (
-          <>
-            <div className="bar" role="img" aria-label="Ingresos por categoría">
-              {fuentes.map((f) => (
-                <div key={f.id} title={f.nombre} style={{ width: `${(f.total / r.ingresos) * 100}%`, background: f.color }} />
-              ))}
-            </div>
-            <ul className="legend">
-              {fuentes.map((f) => (
-                <li key={f.id}>
-                  <span className="dot" style={{ background: f.color }} />
-                  <span>{f.nombre}</span>
-                  <span className="pct">{pct(f.total, r.ingresos)}</span>
-                  <span className="amt">{fmt(f.total)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>A dónde se va el ingreso</h2>
-        <div className="bar" role="img" aria-label="Distribución del ingreso por categoría">
-          {partes.filter((p) => p.total > 0).map((p) => (
-            <div key={p.id} title={p.nombre} style={{ width: `${(p.total / base) * 100}%`, background: p.color }} />
-          ))}
-          {r.sobrante > 0 && <div className="free" title="Sobrante" style={{ width: `${(r.sobrante / base) * 100}%` }} />}
-        </div>
-        <ul className="legend">
-          {partes.map((p) => (
-            <li key={p.id}>
-              <span className="dot" style={{ background: p.color }} />
-              <span>{p.nombre}</span>
-              <span className="pct">{pct(p.total, r.ingresos)}</span>
-              <span className="amt">{fmt(p.total)}</span>
-            </li>
-          ))}
-          <li>
-            <span className="dot free" />
-            <span>Sobrante {anual ? 'al año' : 'al mes'}</span>
-            <span className="pct">{pct(Math.max(r.sobrante, 0), r.ingresos)}</span>
-            <span className="amt">{fmt(r.sobrante)}</span>
-          </li>
-        </ul>
-      </section>
-
-      <section className="panel">
-        <h2>Ingresos contra egresos</h2>
-        <div className="vs">
-          {vs.map(([nombre, valor, color]) => {
-            const w = Math.max((valor / base) * 100, 1);
-            // Con barras cortas la cifra no cabe dentro: va al lado para que siempre se lea.
-            const fuera = w < 30;
-            return (
-              <div key={nombre} className="vsrow">
-                <span>{nombre}</span>
-                <div className="vsbar">
-                  <i style={{ width: `${w}%`, background: color }} />
-                  <b className={fuera ? 'out' : ''} style={fuera ? { left: `calc(${w}% + 8px)` } : undefined}>{fmt(valor)}</b>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>Escenarios</h2>
-        {recortables.length === 0 ? (
-          <p className="note first">Marca un gasto como «recortable» al editarlo para probar aquí cómo cambia el sobrante sin borrarlo.</p>
-        ) : (
-          <>
-            <p className="note first">Prueba cómo queda el sobrante si recortas un gasto. El dato original no se borra.</p>
-            {recortables.map((g) => (
-              <label key={g.id} className="check">
-                <input type="checkbox" checked={excluidos.includes(g.id)} onChange={() => alternar(g.id)} />
-                Recortar {g.nombre} ({fmt(totalGasto(g))} {anual ? 'al año' : 'al mes'})
-              </label>
-            ))}
-            {datos !== real && (
-              <p className="note">
-                Con este escenario el sobrante pasa de <b>{fmt(sobranteReal)}</b> a <b>{fmt(r.sobrante)}</b> {anual ? 'al año' : 'al mes'}.
-              </p>
+      <div className="grid two">
+        <div className="stack">
+          <section className="panel">
+            <h2>De dónde viene</h2>
+            {fuentes.length === 0 ? (
+              <p className="note first">Aún no hay ingresos {anual ? 'en los próximos 12 meses' : 'este mes'}. Agrega uno con «Ingreso».</p>
+            ) : (
+              <Ranking partes={fuentes} base={r.ingresos} tono="in" />
             )}
-          </>
-        )}
-      </section>
+          </section>
+
+          <section className="panel">
+            <h2>Escenarios</h2>
+            {recortables.length === 0 ? (
+              <p className="note first">Marca un gasto como «recortable» al editarlo para probar aquí cómo cambia el sobrante sin borrarlo.</p>
+            ) : (
+              <>
+                <p className="note first">Prueba cómo queda el sobrante si recortas un gasto. El dato original no se borra.</p>
+                {recortables.map((g) => (
+                  <label key={g.id} className="check">
+                    <input type="checkbox" checked={excluidos.includes(g.id)} onChange={() => alternar(g.id)} />
+                    Recortar {g.nombre} ({fmt(totalGasto(g))} {anual ? 'al año' : 'al mes'})
+                  </label>
+                ))}
+                {datos !== real && (
+                  <p className="note">
+                    Con este escenario el sobrante pasa de <b>{fmt(sobranteReal)}</b> a <b>{fmt(r.sobrante)}</b> {anual ? 'al año' : 'al mes'}.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+
+        <section className="panel">
+          <h2>A dónde se va</h2>
+          <Ranking
+            partes={partes} base={base} tono="out"
+            sobrante={{ nombre: `Sobrante ${anual ? 'al año' : 'al mes'}`, total: r.sobrante }}
+          />
+        </section>
+      </div>
 
       <section className="panel">
         <h2>Detalle</h2>

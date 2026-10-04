@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Sesion } from '../shared/tipos.ts';
+import { Icono } from './Icono.tsx';
 import { api, mensaje } from './store.ts';
 
 interface Props {
@@ -26,7 +27,8 @@ export function Acceso({ configurar, onEntrar }: Props) {
 
   return (
     <main className="acceso">
-      <h1>Finanzas familiares</h1>
+      <div className="brand"><span className="logo"><Icono n="marca" s={16} /></span>Finanzas</div>
+      <h1>Tu dinero,<br />de un vistazo.</h1>
       <p className="sub">
         {configurar
           ? 'Primera vez: crea la cuenta de administrador. Después podrás agregar a los demás usuarios.'
