@@ -2,6 +2,15 @@
 
 Dashboard de presupuesto familiar (México, MXN): cuánto entra, cuánto se paga (con ahorros y meses sin intereses) y cuánta liquidez queda cada mes. Los datos viven en SQLite en el servidor, así que se ven igual desde cualquier dispositivo de la red local.
 
+## Qué hace
+
+- **Resumen:** ingresos, egresos y sobrante del mes o de los próximos 12 meses, con el desglose por categoría y el detalle de cada concepto.
+- **Liquidez por mes:** una gráfica con lo que queda libre cada mes. Al tocar un mes se despliega su detalle: ingresos, gastos fijos, meses sin intereses y liquidez.
+- **Pagos:** la lista de lo que hay que pagar en el mes, para irlo marcando, y el avance de las compras a meses sin intereses.
+- **Escenarios:** un gasto marcado como «recortable» se puede quitar de las cuentas sin borrarlo, para ver cómo cambia el sobrante.
+- **Reparto del hogar:** cuando dos o más personas comparten el hogar (ver «Usuarios»), cada ingreso dice de quién es y cada gasto o compra a MSI quién lo paga. Por defecto va en partes iguales; se puede poner «solo» una persona, o que una ponga un porcentaje o una cantidad y el resto los demás. El Resumen muestra por persona lo que gana, lo que le toca aportar y lo que le queda.
+- **Split:** un gasto que se comparte con gente de fuera del hogar (por ejemplo, una renta entre tres) se captura por el total, diciendo entre cuántas personas se divide y qué parte toca: partes iguales, una cantidad o un porcentaje. En las cuentas solo entra esa parte.
+
 ## Desarrollo
 
 Requiere Node 24 o superior (usa `node:sqlite` y ejecuta TypeScript directo, sin compilar el servidor).
@@ -43,14 +52,14 @@ Para construir la imagen en el propio servidor en lugar de bajarla: `docker comp
 - **Más usuarios:** el administrador los crea en la pestaña **Cuenta** (no hay límite). 
 - **Cuentas limpias:** toda cuenta, incluida la del administrador, empieza sin datos: solo trae las categorías. Para cargar datos existentes usa **Datos → Respaldo → Importar JSON**.
 - **Categorías:** hay categorías de gasto y de ingreso (Sueldo, Bono, Aguinaldo…). Se crean al capturar, con «+ Nueva categoría…», o en **Datos → Categorías**, donde también se renombran y se borran las que no están en uso.
-- **Información separada:** cada usuario solo ve y modifica lo suyo. El administrador crea cuentas, restablece contraseñas y borra usuarios (con toda su información), pero no ve los datos de los demás desde la app.
-- **Hogar compartido:** al crear un usuario, el administrador puede marcar «Comparte mi hogar». Ese usuario entra con su propia cuenta, pero ve y edita los mismos datos que el administrador. Cada ingreso, gasto y compra a MSI dice cómo se reparte entre los miembros (por defecto, partes iguales) y el Resumen muestra por persona lo que gana, lo que le toca aportar y lo que le queda.
+- **Información separada:** cada usuario solo ve y modifica lo suyo, salvo que comparta el hogar del administrador (siguiente punto). El administrador crea cuentas, restablece contraseñas y borra usuarios (con toda su información), pero no ve los datos de quienes no comparten su hogar.
+- **Hogar compartido:** al crear un usuario, el administrador puede marcar «Comparte mi hogar». Ese usuario entra con su propia cuenta, pero ve y edita los mismos datos que el administrador, incluidos los gastos personales de cada quien. También se puede agregar o sacar del hogar a un usuario que ya existe, desde la lista de usuarios; al sacarlo vuelve a su propia información, que se conserva aparte.
 - Las contraseñas se guardan con hash (scrypt) y las sesiones duran 30 días. Tras 8 intentos fallidos, ese usuario queda bloqueado 15 minutos desde esa dirección.
 - Si el administrador olvida su contraseña no hay recuperación desde la interfaz: hay que restaurar un respaldo del volumen o editar la base a mano.
 
 ## Conectar un asistente (LLM)
 
-La app incluye un servidor **MCP** de solo lectura en `/mcp`, para que un asistente consulte los datos de un usuario.
+La app incluye un servidor **MCP** de solo lectura en `/mcp`, para que un asistente consulte los datos de un usuario (o los de su hogar, si lo comparte).
 
 1. En la pestaña **Cuenta → Acceso para asistentes**, crea un token. Se muestra una sola vez.
 2. Conecta el asistente a `http://TU-SERVIDOR:8080/mcp` mandando el token en la cabecera `Authorization: Bearer fin_…`. Con Claude Code:
@@ -61,7 +70,7 @@ La app incluye un servidor **MCP** de solo lectura en `/mcp`, para que un asiste
 
 Herramientas disponibles: `resumen`, `liquidez_proyectada`, `ingresos`, `gastos`, `meses_sin_intereses` y `pagos_del_mes`. Todas devuelven montos ya calculados y aceptan un `mes` opcional (`AAAA-MM`).
 
-- Un token solo ve los datos de su dueño y **no puede modificar nada**.
+- Un token solo ve los datos de su dueño, o los del hogar que comparte, y **no puede modificar nada**. Con varias personas en el hogar, `resumen` incluye lo que le toca a cada una y `gastos` cuánto paga cada quien.
 - Se revoca desde la misma pantalla; cambiar la contraseña revoca todos los tokens del usuario.
 - El mismo token sirve para la API de lectura: `GET /api/resumen`, `/api/liquidez`, `/api/estado` y `/api/exportar`.
 - La autenticación es por token fijo. Los clientes que solo aceptan conectores con OAuth necesitarían un flujo OAuth que la app todavía no tiene.
@@ -92,7 +101,7 @@ Lo que ya hace la app: contraseñas con hash, bloqueo tras intentos fallidos (in
 
 ## Respaldo
 
-En la pestaña **Datos**: «Exportar JSON» descarga los datos del usuario que tiene la sesión abierta y «Importar JSON» los restaura (reemplaza solo los de ese usuario). Para respaldar a todos a la vez, copia el volumen de vez en cuando.
+En la pestaña **Datos**: «Exportar JSON» descarga los datos del usuario que tiene la sesión abierta y «Importar JSON» los restaura (reemplaza solo los de ese usuario). Quien comparte un hogar exporta e importa los datos del hogar, así que al importar los reemplaza para todos sus miembros. Para respaldar a todos a la vez, copia el volumen de vez en cuando.
 
 ## Cómo está organizado
 
