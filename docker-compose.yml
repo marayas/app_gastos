@@ -1,0 +1,14 @@
+services:
+  finanzas:
+    image: ghcr.io/marayas/app_gastos:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: America/Mexico_City
+    volumes:
+      - finanzas-data:/data
+
+volumes:
+  finanzas-data:

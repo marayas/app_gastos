@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+respaldo
+.git
+.github
+.DS_Store
+# Nada de esto se necesita para construir la imagen, y parte contiene datos personales.
+tests
+*.md
+dashboard-finanzas-familiares.html
