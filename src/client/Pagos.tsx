@@ -13,7 +13,7 @@ import {
 import type { Coleccion, CompraMSI, Datos, Gasto, Mes } from '../shared/tipos.ts';
 import { Anillo, Columnas } from './Graficas.tsx';
 import type { Item, Store } from './store.ts';
-import { COLOR_MSI, colorDe, fmt, mesCorto, mesLargo } from './ui.ts';
+import { COLOR_MSI, colorDe, fmt, mesCorto, mesLargo, textoReparto, textoSplit } from './ui.ts';
 
 interface Props {
   real: Datos;
@@ -56,13 +56,16 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
     <Fila
       key={g.id} id={g.id} nombre={g.nombre} color={colorDe(categoria(g))} monto={monto(g)}
       pagado={pagado.has(g.id)} onMarcar={(v) => store.marcar(mes, g.id, v)} onEditar={() => abrir('gastos', g)}
-      detalle={
-        g.porDia
-          ? `${diasConClases(real, g.porDia.diasSemana, mes)} días × ${fmt(g.porDia.tarifa)}`
-          : g.frecuencia !== 'mes'
-            ? `Se paga ${fmt(g.monto)} ${CUANDO[g.frecuencia]}`
-            : (g.nota ?? categoria(g)?.nombre ?? '')
-      }
+      detalle={[
+        g.split
+          ? `Split de ${fmt(g.porDia ? g.porDia.tarifa : g.monto)}${CUANDO[g.frecuencia] && ' ' + CUANDO[g.frecuencia]}, ${textoSplit(g.split)}`
+          : g.porDia
+            ? `${diasConClases(real, g.porDia.diasSemana, mes)} días × ${fmt(g.porDia.tarifa)}`
+            : g.frecuencia !== 'mes'
+              ? `Se paga ${fmt(g.monto)} ${CUANDO[g.frecuencia]}`
+              : (g.nota ?? categoria(g)?.nombre ?? ''),
+        textoReparto(g.reparto, real.miembros),
+      ].filter(Boolean).join(' · ')}
     />
   );
 

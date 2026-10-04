@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Coleccion, Datos, PagoMarcado, Rol, TokenApi, Usuario } from '../shared/tipos.ts';
+import type { Coleccion, Datos, PagoMarcado, Persona, Rol, TokenApi, Usuario } from '../shared/tipos.ts';
 import { CLAVE_FALSA, claveCorrecta, hashClave, hashToken, nuevoToken, nuevoTokenApi } from './auth.ts';
 import { MIGRACIONES } from './migraciones.ts';
 
@@ -14,20 +14,20 @@ export class ErrorPeticion extends Error {
   }
 }
 
-type Tipo = 'texto' | 'texto?' | 'numero' | 'entero' | 'bool' | 'mes' | 'mes?' | 'fecha' | 'frecuencia' | 'porDia?' | 'tipoCategoria';
+type Tipo = 'texto' | 'texto?' | 'numero' | 'entero' | 'bool' | 'mes' | 'mes?' | 'fecha' | 'frecuencia' | 'porDia?' | 'split?' | 'reparto?' | 'tipoCategoria';
 type Celda = string | number | null;
 
 const COLECCIONES: Record<Coleccion, { tabla: string; campos: Record<string, Tipo> }> = {
   categorias: { tabla: 'categorias', campos: { nombre: 'texto', tipo: 'tipoCategoria', color: 'texto', orden: 'entero' } },
-  ingresos: { tabla: 'ingresos', campos: { nombre: 'texto', categoria: 'texto?', monto: 'numero', desde: 'mes?', hasta: 'mes?' } },
+  ingresos: { tabla: 'ingresos', campos: { nombre: 'texto', categoria: 'texto?', monto: 'numero', desde: 'mes?', hasta: 'mes?', reparto: 'reparto?' } },
   gastos: {
     tabla: 'gastos',
     campos: {
       nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia',
-      recortable: 'bool', nota: 'texto?', porDia: 'porDia?',
+      recortable: 'bool', nota: 'texto?', porDia: 'porDia?', split: 'split?', reparto: 'reparto?',
     },
   },
-  msi: { tabla: 'compras_msi', campos: { nombre: 'texto', pagoMensual: 'numero', plazoTotal: 'entero', inicio: 'mes' } },
+  msi: { tabla: 'compras_msi', campos: { nombre: 'texto', pagoMensual: 'numero', plazoTotal: 'entero', inicio: 'mes', reparto: 'reparto?' } },
   ciclos: { tabla: 'ciclos_escolares', campos: { nombre: 'texto', inicio: 'fecha', fin: 'fecha' } },
   sinClases: { tabla: 'sin_clases', campos: { desde: 'fecha', hasta: 'fecha', motivo: 'texto' } },
 };
@@ -82,13 +82,31 @@ function aCelda(tipo: Tipo, v: unknown, campo: string): Celda {
         p.diasSemana.every((n) => Number.isInteger(n) && n >= 0 && n <= 6);
       return ok ? JSON.stringify({ tarifa: p.tarifa, diasSemana: p.diasSemana }) : falla();
     }
+    case 'split?': {
+      const s = v as { personas?: unknown; tipo?: unknown; valor?: unknown };
+      if (typeof s !== 'object' || !Number.isInteger(s.personas) || (s.personas as number) < 2 || (s.personas as number) > 99) return falla();
+      if (s.tipo === 'iguales') return JSON.stringify({ personas: s.personas, tipo: s.tipo });
+      const ok =
+        (s.tipo === 'monto' || s.tipo === 'pct') &&
+        typeof s.valor === 'number' && Number.isFinite(s.valor) && s.valor >= 0 && (s.tipo === 'monto' || s.valor <= 100);
+      return ok ? JSON.stringify({ personas: s.personas, tipo: s.tipo, valor: s.valor }) : falla();
+    }
+    case 'reparto?': {
+      const r = v as { tipo?: unknown; de?: unknown; valor?: unknown };
+      if (typeof r !== 'object' || typeof r.de !== 'string' || !RE_ID.test(r.de)) return falla();
+      if (r.tipo === 'solo') return JSON.stringify({ tipo: r.tipo, de: r.de });
+      const ok =
+        (r.tipo === 'monto' || r.tipo === 'pct') &&
+        typeof r.valor === 'number' && Number.isFinite(r.valor) && r.valor >= 0 && (r.tipo === 'monto' || r.valor <= 100);
+      return ok ? JSON.stringify({ tipo: r.tipo, de: r.de, valor: r.valor }) : falla();
+    }
   }
 }
 
 function deCelda(tipo: Tipo, v: unknown): unknown {
   if (tipo === 'bool') return v === 1 ? true : undefined;
   if (v === null) return undefined;
-  return tipo === 'porDia?' ? JSON.parse(v as string) : v;
+  return tipo === 'porDia?' || tipo === 'split?' || tipo === 'reparto?' ? JSON.parse(v as string) : v;
 }
 
 function nombreValido(v: unknown): string {
@@ -184,6 +202,8 @@ export function abrirAlmacen(ruta: string) {
         msi: leer('msi'),
         ciclos: leer('ciclos'),
         sinClases: leer('sinClases'),
+        // Quienes comparten estos datos: el dueño y los usuarios que están en su hogar.
+        miembros: db.prepare('SELECT id, nombre FROM usuarios WHERE id = ? OR hogar = ? ORDER BY rowid').all(uid, uid) as unknown as Persona[],
         pagos: db
           .prepare('SELECT mes, item_id AS itemId FROM pagos_marcados WHERE usuario_id = ? ORDER BY mes')
           .all(uid) as unknown as PagoMarcado[],
@@ -269,12 +289,26 @@ export function abrirAlmacen(ruta: string) {
   }
 
   const buscarUsuario = (id: string) =>
-    db.prepare('SELECT id, nombre, rol FROM usuarios WHERE id = ?').get(id) as unknown as Usuario | undefined;
+    db.prepare('SELECT id, nombre, rol, hogar FROM usuarios WHERE id = ?').get(id) as unknown as Usuario | undefined;
 
   return {
     para,
     hayUsuarios: () => db.prepare('SELECT 1 FROM usuarios LIMIT 1').get() !== undefined,
-    listarUsuarios: () => db.prepare('SELECT id, nombre, rol FROM usuarios ORDER BY rowid').all() as unknown as Usuario[],
+    listarUsuarios: () => db.prepare('SELECT id, nombre, rol, hogar FROM usuarios ORDER BY rowid').all() as unknown as Usuario[],
+
+    /** Id del usuario dueño de los datos que ve `id`: el suyo, o el del hogar que comparte. */
+    hogarDe: (id: string) => buscarUsuario(id)?.hogar ?? id,
+
+    /** Mete a un usuario al hogar de otro (o lo saca, con null). Sus datos propios se conservan sin usarse. */
+    asignarHogar(id: string, hogar: string | null) {
+      const usuario = buscarUsuario(id);
+      if (!usuario) throw new ErrorPeticion('No existe', 404);
+      if (hogar !== null) {
+        if (hogar === id || buscarUsuario(hogar)?.hogar) throw new ErrorPeticion('Ese hogar no es válido');
+        if (db.prepare('SELECT 1 FROM usuarios WHERE hogar = ?').get(id)) throw new ErrorPeticion('Otros usuarios comparten el hogar de esta cuenta');
+      }
+      db.prepare('UPDATE usuarios SET hogar = ? WHERE id = ?').run(hogar, id);
+    },
 
     /** Crea la cuenta y le carga sus datos iniciales. */
     crearUsuario(nombre: unknown, clave: unknown, rol: Rol, datosIniciales: Datos): Usuario {
@@ -350,6 +384,7 @@ export function abrirAlmacen(ruta: string) {
       if (usuario.rol === 'admin') throw new ErrorPeticion('No se puede borrar al administrador');
       transaccion(() => {
         para(id).vaciar();
+        db.prepare('UPDATE usuarios SET hogar = NULL WHERE hogar = ?').run(id);
         db.prepare('DELETE FROM usuarios WHERE id = ?').run(id);
       });
     },

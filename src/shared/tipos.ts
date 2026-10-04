@@ -20,6 +20,27 @@ export interface Ingreso {
   monto: number; // por mes
   desde?: Mes; // primer mes con ingreso; vacío = desde siempre
   hasta?: Mes; // último mes con ingreso; vacío = indefinido. desde = hasta para un ingreso de una sola vez
+  reparto?: Reparto; // de quién es
+}
+
+/** Usuario que comparte el hogar: todos sus miembros ven y editan los mismos datos. */
+export interface Persona {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * Cómo se reparte un monto entre los miembros del hogar. Sin reparto = partes iguales.
+ * "solo": todo es de `de`. "pct"/"monto": `de` pone ese porcentaje o esa cantidad
+ * (en la unidad del elemento: su frecuencia, o por mes) y el resto se divide entre los demás.
+ */
+export type Reparto = { tipo: 'solo'; de: string } | { tipo: 'pct' | 'monto'; de: string; valor: number };
+
+/** Gasto compartido con gente de fuera del hogar: de `monto` solo cuenta la parte del hogar. */
+export interface Split {
+  personas: number; // entre cuántas personas se divide, contando al usuario
+  tipo: 'iguales' | 'monto' | 'pct';
+  valor?: number; // la parte del usuario: cantidad (en la frecuencia del gasto) o porcentaje; no aplica en "iguales"
 }
 
 export interface Gasto {
@@ -34,6 +55,8 @@ export interface Gasto {
     tarifa: number;
     diasSemana: number[]; // 1=lunes ... 5=viernes
   };
+  split?: Split;
+  reparto?: Reparto;
 }
 
 export interface CompraMSI {
@@ -42,6 +65,7 @@ export interface CompraMSI {
   pagoMensual: number;
   plazoTotal: number;
   inicio: Mes; // mes del primer pago
+  reparto?: Reparto;
 }
 
 export interface PagoMarcado {
@@ -72,6 +96,7 @@ export interface Datos {
   pagos: PagoMarcado[];
   ciclos: CicloEscolar[];
   sinClases: SinClases[];
+  miembros?: Persona[]; // quienes comparten estos datos, el dueño primero; no va en los respaldos
 }
 
 export interface Estado extends Datos {
@@ -86,6 +111,7 @@ export interface Usuario {
   id: string;
   nombre: string;
   rol: Rol;
+  hogar?: string | null; // id del usuario cuyos datos comparte; vacío = los suyos
 }
 
 export interface Sesion {

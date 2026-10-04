@@ -82,4 +82,16 @@ export const MIGRACIONES: string[] = [
     ultimo_uso TEXT
   );
   `,
+  // 4: gastos compartidos (split): solo cuenta la parte del usuario. Se guarda como JSON.
+  `
+  ALTER TABLE gastos ADD COLUMN split TEXT;
+  `,
+  // 5: hogar compartido. Un usuario con `hogar` ve y edita los datos de ese otro usuario en lugar de los suyos,
+  // y cada ingreso, gasto y compra dice cómo se reparte entre los miembros (JSON; vacío = partes iguales).
+  `
+  ALTER TABLE usuarios ADD COLUMN hogar TEXT;
+  ALTER TABLE ingresos ADD COLUMN reparto TEXT;
+  ALTER TABLE gastos ADD COLUMN reparto TEXT;
+  ALTER TABLE compras_msi ADD COLUMN reparto TEXT;
+  `,
 ];

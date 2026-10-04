@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Categoria, Mes } from '../shared/tipos.ts';
+import type { Categoria, Mes, Persona, Reparto, Split } from '../shared/tipos.ts';
 
 /** Redondeo solo al mostrar: hacia arriba, sin decimales. */
 export function fmt(v: number): string {
@@ -22,6 +22,21 @@ export const mesCorto = (m: Mes) => fechaDeMes(m).toLocaleDateString('es-MX', { 
 export function fechaLarga(f: string): string {
   const [y, mo, d] = f.split('-').map(Number);
   return new Date(y, mo - 1, d).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** "tu parte: 50% · entre 2 personas" */
+export function textoSplit(s: Split): string {
+  const parte = s.tipo === 'iguales' ? 'partes iguales' : s.tipo === 'pct' ? `${s.valor ?? 0}%` : fmt(s.valor ?? 0);
+  return `tu parte: ${parte} · entre ${s.personas} personas`;
+}
+
+/** "solo Ana" o "Marco 70%, el resto Ana"; null si el reparto no aplica (hogar de una persona o miembro que ya no está). */
+export function textoReparto(r: Reparto | undefined, miembros: Persona[] = []): string | null {
+  const quien = miembros.find((m) => m.id === r?.de);
+  if (!r || !quien || miembros.length < 2) return null;
+  if (r.tipo === 'solo') return `solo ${quien.nombre}`;
+  const otros = miembros.filter((m) => m !== quien).map((m) => m.nombre).join(' y ');
+  return `${quien.nombre} ${r.tipo === 'pct' ? r.valor + '%' : fmt(r.valor)}, el resto ${otros}`;
 }
 
 export const COLOR_MSI = 'var(--c11)';

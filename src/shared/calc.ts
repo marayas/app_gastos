@@ -1,4 +1,4 @@
-import type { CompraMSI, Datos, Frecuencia, Gasto, Ingreso, Mes } from './tipos.ts';
+import type { CompraMSI, Datos, Frecuencia, Gasto, Ingreso, Mes, Persona, Reparto, Split } from './tipos.ts';
 
 export const FACTOR: Record<Frecuencia, number> = { mes: 1, bimestre: 1 / 2, anio: 1 / 12 };
 
@@ -35,9 +35,19 @@ export function diasConClases(cal: Calendario, diasSemana: number[], mes: Mes): 
   return n;
 }
 
+/** Parte de `total` que le toca al usuario en un gasto compartido; nunca más que el total. */
+export function parteDeSplit(s: Split, total: number): number {
+  if (s.tipo === 'iguales') return total / Math.max(s.personas, 1);
+  if (s.tipo === 'pct') return (total * Math.min(s.valor ?? 0, 100)) / 100;
+  return Math.min(s.valor ?? 0, total);
+}
+
 export function gastoDelMes(cal: Calendario, g: Gasto, mes: Mes): number {
-  if (g.porDia) return g.porDia.tarifa * diasConClases(cal, g.porDia.diasSemana, mes);
-  return g.monto * FACTOR[g.frecuencia];
+  if (g.porDia) {
+    const total = g.porDia.tarifa * diasConClases(cal, g.porDia.diasSemana, mes);
+    return g.split ? parteDeSplit(g.split, total) : total;
+  }
+  return (g.split ? parteDeSplit(g.split, g.monto) : g.monto) * FACTOR[g.frecuencia];
 }
 
 export const ingresoVigente = (x: Ingreso, mes: Mes): boolean =>
@@ -128,4 +138,45 @@ export function resumen(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): Resumen {
   const msi = periodo === 'mes' ? msiDelMes(d, mes) : msiRestanteTotal(d, mes);
   const egresos = Object.values(porCategoria).reduce((s, v) => s + v, 0) + msi;
   return { ingresos, ingresosPorCategoria, porCategoria, msi, egresos, sobrante: ingresos - egresos };
+}
+
+/**
+ * Reparte `total` entre los miembros del hogar, en su mismo orden. Sin reparto (o si quien lo
+ * tenía ya no es miembro) va en partes iguales. `factor` lleva la cantidad fija a la unidad de `total`.
+ */
+export function repartir(r: Reparto | undefined, total: number, miembros: Persona[], factor = 1): number[] {
+  const n = miembros.length;
+  const i = r ? miembros.findIndex((m) => m.id === r.de) : -1;
+  if (!r || i < 0 || n < 2) return miembros.map(() => total / n);
+  const parte = r.tipo === 'solo' ? total : r.tipo === 'pct' ? (total * Math.min(r.valor, 100)) / 100 : Math.min(r.valor * factor, total);
+  return miembros.map((_, j) => (j === i ? parte : (total - parte) / (n - 1)));
+}
+
+export interface ResumenPersona {
+  persona: Persona;
+  ingresos: number;
+  egresos: number; // lo que le toca aportar
+  sobrante: number;
+}
+
+/** El mismo resumen del hogar, visto por persona; sus sumas dan los totales de `resumen`. */
+export function resumenPorPersona(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): ResumenPersona[] {
+  const miembros = d.miembros ?? [];
+  const meses = periodo === 'mes' ? [mes] : rangoMeses(mes, 12);
+  const ingresos = miembros.map(() => 0);
+  const egresos = miembros.map(() => 0);
+  const sumar = (a: number[], partes: number[]) => partes.forEach((p, i) => (a[i] += p));
+  for (const x of d.ingresos) {
+    const n = meses.filter((m) => ingresoVigente(x, m)).length;
+    sumar(ingresos, repartir(x.reparto, x.monto * n, miembros, n));
+  }
+  for (const g of d.gastos) {
+    const total = meses.reduce((s, m) => s + gastoDelMes(d, g, m), 0);
+    sumar(egresos, repartir(g.reparto, total, miembros, FACTOR[g.frecuencia] * meses.length));
+  }
+  for (const c of d.msi) {
+    const pagos = periodo === 'mes' ? (msiActiva(c, mes) ? 1 : 0) : pagosRestantes(c, mes);
+    sumar(egresos, repartir(c.reparto, c.pagoMensual * pagos, miembros, pagos));
+  }
+  return miembros.map((persona, i) => ({ persona, ingresos: ingresos[i], egresos: egresos[i], sobrante: ingresos[i] - egresos[i] }));
 }

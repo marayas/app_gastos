@@ -44,6 +44,7 @@ Para construir la imagen en el propio servidor en lugar de bajarla: `docker comp
 - **Cuentas limpias:** toda cuenta, incluida la del administrador, empieza sin datos: solo trae las categorías. Para cargar datos existentes usa **Datos → Respaldo → Importar JSON**.
 - **Categorías:** hay categorías de gasto y de ingreso (Sueldo, Bono, Aguinaldo…). Se crean al capturar, con «+ Nueva categoría…», o en **Datos → Categorías**, donde también se renombran y se borran las que no están en uso.
 - **Información separada:** cada usuario solo ve y modifica lo suyo. El administrador crea cuentas, restablece contraseñas y borra usuarios (con toda su información), pero no ve los datos de los demás desde la app.
+- **Hogar compartido:** al crear un usuario, el administrador puede marcar «Comparte mi hogar». Ese usuario entra con su propia cuenta, pero ve y edita los mismos datos que el administrador. Cada ingreso, gasto y compra a MSI dice cómo se reparte entre los miembros (por defecto, partes iguales) y el Resumen muestra por persona lo que gana, lo que le toca aportar y lo que le queda.
 - Las contraseñas se guardan con hash (scrypt) y las sesiones duran 30 días. Tras 8 intentos fallidos, ese usuario queda bloqueado 15 minutos desde esa dirección.
 - Si el administrador olvida su contraseña no hay recuperación desde la interfaz: hay que restaurar un respaldo del volumen o editar la base a mano.
 

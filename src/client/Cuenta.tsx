@@ -132,6 +132,7 @@ function Usuarios() {
   const [lista, setLista] = useState<Usuario[]>([]);
   const [nombre, setNombre] = useState('');
   const [clave, setClave] = useState('');
+  const [enHogar, setEnHogar] = useState(true);
   const [aviso, setAviso] = useState<Aviso>(null);
 
   const cargar = () => api<Usuario[]>('GET', '/api/usuarios').then(setLista);
@@ -152,7 +153,7 @@ function Usuarios() {
   function crear(e: React.FormEvent) {
     e.preventDefault();
     hacer(async () => {
-      await api('POST', '/api/usuarios', { nombre, clave });
+      await api('POST', '/api/usuarios', { nombre, clave, hogar: enHogar });
       setNombre('');
       setClave('');
     }, `Usuario «${nombre.trim()}» creado. Compártele su contraseña; podrá cambiarla al entrar.`);
@@ -161,6 +162,14 @@ function Usuarios() {
   function restablecer(u: Usuario) {
     const nueva = prompt(`Contraseña nueva para ${u.nombre} (mínimo 8 caracteres):`);
     if (nueva) hacer(() => api('POST', `/api/usuarios/${u.id}/clave`, { clave: nueva }), `Contraseña de «${u.nombre}» restablecida; sus sesiones se cerraron.`);
+  }
+
+  function hogar(u: Usuario) {
+    const compartir = !u.hogar;
+    hacer(
+      () => api('PUT', `/api/usuarios/${u.id}/hogar`, { compartir }),
+      compartir ? `«${u.nombre}» ahora ve y edita los mismos datos que tú.` : `«${u.nombre}» volvió a su propia información.`,
+    );
   }
 
   function borrar(u: Usuario) {
@@ -173,13 +182,15 @@ function Usuarios() {
     <section className="panel">
       <h2>Usuarios</h2>
       <p className="note first">
-        Cada usuario tiene su propia información y no puede ver la de los demás. Como administrador creas y borras cuentas, pero tampoco ves sus datos.
+Quien comparte tu hogar entra con su usuario y ve y edita los mismos datos que tú; así se reparten los ingresos y gastos entre los dos.
+        Los demás usuarios tienen su propia información y nadie más la ve, tampoco tú como administrador.
       </p>
       {lista.map((u) => (
         <div key={u.id} className="lrow">
-          <span className="pn">{u.nombre}<small>{u.rol === 'admin' ? 'Administrador' : 'Usuario'}</small></span>
+          <span className="pn">{u.nombre}<small>{u.rol === 'admin' ? 'Administrador' : u.hogar ? 'Comparte tu hogar' : 'Usuario con su propia información'}</small></span>
           {u.rol !== 'admin' && (
             <span className="btns">
+              <button className="ghost" onClick={() => hogar(u)}>{u.hogar ? 'Sacar de mi hogar' : 'Agregar a mi hogar'}</button>
               <button className="ghost" onClick={() => restablecer(u)}>Restablecer contraseña</button>
               <button className="ghost danger" onClick={() => borrar(u)}>Borrar</button>
             </span>
@@ -195,8 +206,13 @@ function Usuarios() {
         <div className="field">
           <label htmlFor="u-clave">Contraseña inicial</label>
           <input id="u-clave" type="text" autoComplete="off" value={clave} onChange={(e) => setClave(e.target.value)} required minLength={8} maxLength={200} />
-          <small>Mínimo 8 caracteres. La cuenta empieza limpia, sin datos cargados.</small>
+          <small>Mínimo 8 caracteres.</small>
         </div>
+        <label className="check">
+          <input type="checkbox" checked={enHogar} onChange={(e) => setEnHogar(e.target.checked)} />
+          Comparte mi hogar (ve y edita mis mismos datos)
+        </label>
+        <p className="note">Sin marcar, la cuenta empieza limpia y con su propia información.</p>
         <Mensaje aviso={aviso} />
         <div className="actions"><button type="submit" className="primary">Agregar usuario</button></div>
       </form>

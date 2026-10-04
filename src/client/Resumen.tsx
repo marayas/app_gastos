@@ -1,11 +1,11 @@
-import { diasConClases, gastoDelMes, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen } from '../shared/calc.ts';
-import type { Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes } from '../shared/tipos.ts';
+import { diasConClases, gastoDelMes, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen, resumenPorPersona } from '../shared/calc.ts';
+import type { Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
 import { deTipo, FRECUENCIAS } from './formularios.ts';
 import { Columnas, Ranking } from './Graficas.tsx';
 import { Icono } from './Icono.tsx';
 import { MontoInput } from './MontoInput.tsx';
 import type { Item, Store } from './store.ts';
-import { COLOR_MSI, colorDe, fmt, mesLargo, pct, usePref } from './ui.ts';
+import { COLOR_MSI, colorDe, fmt, mesLargo, pct, textoReparto, textoSplit, usePref } from './ui.ts';
 
 interface Props {
   real: Datos; // datos guardados
@@ -50,6 +50,8 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
   const totalGasto = (g: Gasto) => meses.reduce((s, m) => s + gastoDelMes(real, g, m), 0);
   const msiPendientes = real.msi.filter((c) => pagosRestantes(c, mes) > 0);
   const usado = r.ingresos ? r.egresos / r.ingresos : 0;
+  const personas = resumenPorPersona(datos, mes, periodo);
+  const reparto = (x: { reparto?: Reparto }) => textoReparto(x.reparto, real.miembros);
 
   return (
     <>
@@ -115,6 +117,28 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
           </div>
         )}
       </section>
+
+      {personas.length > 1 && (
+        <section className="panel">
+          <h2>Por persona</h2>
+          <p className="note first">
+            Lo que gana cada quien, lo que le toca aportar a los gastos del hogar y lo que le queda {anual ? 'en los próximos 12 meses' : 'este mes'}.
+            Cada gasto se reparte en partes iguales, salvo que diga otra cosa.
+          </p>
+          <div className="personas">
+            {personas.map((p) => (
+              <div key={p.persona.id} className="persona">
+                <h3>{p.persona.nombre}</h3>
+                <dl>
+                  <div><dt>Ingresos</dt><dd>{fmt(p.ingresos)}</dd></div>
+                  <div><dt>Le toca aportar</dt><dd>{fmt(p.egresos)}</dd></div>
+                  <div className="tot"><dt>Le queda</dt><dd className={p.sobrante < 0 ? 'neg' : ''}>{fmt(p.sobrante)}</dd></div>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="grid two">
         <div className="stack">
@@ -182,6 +206,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                     <tr key={x.id}>
                       <td>
                         <button className="link" onClick={() => abrir('ingresos', x)}>{x.nombre}</button>
+                        {reparto(x) && <small>{reparto(x)}</small>}
                       </td>
                       <td className="r">
                         <MontoInput valor={x.monto} etiqueta={x.nombre} onChange={(monto) => store.guardar('ingresos', { ...x, monto }, true)} />
@@ -201,7 +226,10 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                         <td>
                           <button className="link" onClick={() => abrir('gastos', g)}>{g.nombre}</button>
                           {g.recortable && <span className="flag">{fuera ? 'recortado' : 'recortable'}</span>}
+                          {g.split && <span className="flag">split</span>}
                           {g.nota && <small>{g.nota}</small>}
+                          {g.split && <small>{textoSplit(g.split)}</small>}
+                          {reparto(g) && <small>{reparto(g)}</small>}
                         </td>
                         <td className="r">
                           <MontoInput
@@ -236,7 +264,10 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                   const k = pagosRestantes(c, mes);
                   return (
                     <tr key={c.id}>
-                      <td><button className="link" onClick={() => abrir('msi', c)}>{c.nombre}</button></td>
+                      <td>
+                        <button className="link" onClick={() => abrir('msi', c)}>{c.nombre}</button>
+                        {reparto(c) && <small>{reparto(c)}</small>}
+                      </td>
                       <td className="r">{fmt(c.pagoMensual)}</td>
                       <td>{k} de {c.plazoTotal} {k === 1 ? 'pago restante' : 'pagos restantes'}</td>
                       <td className="r">{fmt(anual ? c.pagoMensual * k : c.inicio <= mes ? c.pagoMensual : 0)}</td>

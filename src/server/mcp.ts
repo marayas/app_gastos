@@ -40,7 +40,7 @@ const HERRAMIENTAS: Herramienta[] = [
     name: 'resumen',
     title: 'Resumen de ingresos y egresos',
     description:
-      'Ingresos, egresos y sobrante del usuario, con el desglose por categoría. Úsala para preguntas como "¿cuánto me sobra este mes?" o "¿en qué se va mi dinero?". Montos en pesos mexicanos (MXN).',
+      'Ingresos, egresos y sobrante del hogar, con el desglose por categoría y, si lo comparten varias personas, lo que le toca aportar y le queda a cada una. Úsala para preguntas como "¿cuánto me sobra este mes?" o "¿en qué se va mi dinero?". Montos en pesos mexicanos (MXN).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -73,7 +73,7 @@ const HERRAMIENTAS: Herramienta[] = [
     name: 'gastos',
     title: 'Lista de gastos',
     description:
-      'Gastos y ahorros registrados, ordenados por lo que cuestan en el mes. Se puede filtrar por nombre de categoría (por ejemplo "Suscripciones"). Incluye cuáles están marcados como recortables.',
+      'Gastos y ahorros registrados, ordenados por lo que cuestan en el mes. Se puede filtrar por nombre de categoría (por ejemplo "Suscripciones"). Incluye cuáles están marcados como recortables y, si el hogar tiene varios miembros, cuánto le toca pagar a cada uno.',
     inputSchema: {
       type: 'object',
       properties: { mes: MES, categoria: { type: 'string', description: 'Nombre exacto de la categoría para filtrar. Opcional.' } },

@@ -85,7 +85,7 @@ function Panel({ usuario, onSalir, oscuro, onTema }: PanelProps) {
 
   const mes = (HOY_SIMULADO ?? estado.hoy).slice(0, 7);
   const abrir = (col: Coleccion, item: Item | null, base?: Record<string, unknown>) => setEdicion({ col, item, base });
-  const form = edicion && formulario(edicion.col, estado.categorias, mes, (edicion.item as Record<string, unknown> | null) ?? edicion.base ?? null);
+  const form = edicion && formulario(edicion.col, estado.categorias, mes, (edicion.item as Record<string, unknown> | null) ?? edicion.base ?? null, { miembros: estado.miembros ?? [], yo: usuario.id });
 
   async function guardarEdicion(v: Valores) {
     if (!edicion || !form) return;

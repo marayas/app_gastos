@@ -11,6 +11,8 @@ import {
   resumen,
   sumarMeses,
   ultimoMesMSI,
+  repartir,
+  resumenPorPersona,
 } from '../src/shared/calc.ts';
 import { EJEMPLO } from './datos-ejemplo.ts';
 
@@ -38,6 +40,57 @@ describe('cobro por día y calendario SEP 2026-2027', () => {
     const total = esperado.reduce((s, [mes]) => s + gastoDelMes(d, as, mes), 0);
     expect(total).toBe(8000);
     expect(gastoDelMes(d, as, '2027-08')).toBe(0);
+  });
+});
+
+describe('gastos compartidos (split)', () => {
+  const base = { id: 'x', nombre: 'Renta', categoria: 'casa', monto: 12000, frecuencia: 'mes' as const };
+  it('solo cuenta la parte del usuario', () => {
+    expect(gastoDelMes(d, { ...base, split: { personas: 3, tipo: 'iguales' } }, '2026-10')).toBe(4000);
+    expect(gastoDelMes(d, { ...base, split: { personas: 2, tipo: 'pct', valor: 60 } }, '2026-10')).toBe(7200);
+    expect(gastoDelMes(d, { ...base, split: { personas: 2, tipo: 'monto', valor: 5000 } }, '2026-10')).toBe(5000);
+  });
+  it('respeta la frecuencia y nunca pasa del total', () => {
+    expect(gastoDelMes(d, { ...base, frecuencia: 'anio', split: { personas: 2, tipo: 'monto', valor: 6000 } }, '2026-10')).toBe(500);
+    expect(gastoDelMes(d, { ...base, split: { personas: 2, tipo: 'monto', valor: 99999 } }, '2026-10')).toBe(12000);
+  });
+});
+
+describe('reparto entre los miembros del hogar', () => {
+  const marco = { id: 'm', nombre: 'Marco' };
+  const ana = { id: 'a', nombre: 'Ana' };
+  const dos = [marco, ana];
+  it('sin reparto va en partes iguales; con reparto, el resto es de los demás', () => {
+    expect(repartir(undefined, 1000, dos)).toEqual([500, 500]);
+    expect(repartir({ tipo: 'solo', de: 'a' }, 1000, dos)).toEqual([0, 1000]);
+    expect(repartir({ tipo: 'pct', de: 'm', valor: 70 }, 1000, dos)).toEqual([700, 300]);
+    expect(repartir({ tipo: 'monto', de: 'a', valor: 250 }, 1000, dos)).toEqual([750, 250]);
+    expect(repartir({ tipo: 'monto', de: 'a', valor: 6000 }, 1000, dos, 1 / 12)).toEqual([500, 500]); // $6,000 al año = $500 al mes
+    expect(repartir({ tipo: 'pct', de: 'm', valor: 40 }, 900, [...dos, { id: 'l', nombre: 'Luis' }])).toEqual([360, 270, 270]);
+  });
+  it('si quien tenía el reparto ya no está, o el hogar es de una persona, no cambia el total', () => {
+    expect(repartir({ tipo: 'solo', de: 'otro' }, 1000, dos)).toEqual([500, 500]);
+    expect(repartir({ tipo: 'solo', de: 'a' }, 1000, [marco])).toEqual([1000]);
+  });
+  it.each(['mes', 'anio'] as const)('por persona suma lo mismo que el resumen del hogar (%s)', (periodo) => {
+    const hogar = {
+      ...d,
+      miembros: dos,
+      ingresos: d.ingresos.map((x, i) => ({ ...x, reparto: i === 0 ? ({ tipo: 'solo', de: 'm' } as const) : i === 1 ? ({ tipo: 'solo', de: 'a' } as const) : undefined })),
+      gastos: d.gastos.map((g, i) => ({ ...g, reparto: i === 0 ? ({ tipo: 'pct', de: 'm', valor: 70 } as const) : i === 3 ? ({ tipo: 'monto', de: 'a', valor: 3000 } as const) : undefined })),
+      msi: d.msi.map((c, i) => ({ ...c, reparto: i === 2 ? ({ tipo: 'solo', de: 'a' } as const) : undefined })),
+    };
+    const r = resumen(hogar, '2026-10', periodo);
+    const p = resumenPorPersona(hogar, '2026-10', periodo);
+    expect(p.map((x) => x.persona.nombre)).toEqual(['Marco', 'Ana']);
+    expect(p[0].ingresos + p[1].ingresos).toBeCloseTo(r.ingresos, 2);
+    expect(p[0].egresos + p[1].egresos).toBeCloseTo(r.egresos, 2);
+    expect(p[0].sobrante + p[1].sobrante).toBeCloseTo(r.sobrante, 2);
+    if (periodo === 'mes') {
+      expect(p[0].ingresos).toBe(40000 + 2500); // su sueldo y la mitad de la renta
+      // Hipoteca 70/30 y seguro anual: Ana pone $3,000 al año ($250 al mes) y Marco el resto ($750).
+      expect(p[0].egresos - p[1].egresos).toBeCloseTo(15000 * 0.4 + 500 - 1000, 2);
+    }
   });
 });
 

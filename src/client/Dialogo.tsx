@@ -21,7 +21,7 @@ export function Dialogo({ form, item, onGuardar, onBorrar, onCerrar }: Props) {
   }, []);
 
   const campo = (c: Campo) => {
-    if (c.si && !v[c.si]) return null;
+    if (c.si && !c.si(v)) return null;
     const id = 'f-' + c.k;
     if (c.tipo === 'check') {
       return (
@@ -73,8 +73,8 @@ export function Dialogo({ form, item, onGuardar, onBorrar, onCerrar }: Props) {
       control = (
         <input
           id={id} type="number" inputMode={c.tipo === 'entero' ? 'numeric' : 'decimal'}
-          min={c.tipo === 'entero' ? 1 : 0} step={c.tipo === 'entero' ? 1 : 'any'}
-          max={c.maxDe && v[c.maxDe] !== '' ? Number(v[c.maxDe]) : undefined}
+          min={c.min ?? (c.tipo === 'entero' ? 1 : 0)} step={c.tipo === 'entero' ? 1 : 'any'}
+          max={c.maxDe && v[c.maxDe] !== '' ? Number(v[c.maxDe]) : typeof c.max === 'function' ? c.max(v) : c.max}
           value={valor} onChange={(e) => set(c.k, e.target.value)} required
         />
       );

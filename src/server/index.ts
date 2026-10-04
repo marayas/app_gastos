@@ -72,8 +72,8 @@ function iniciarSesion(res: FastifyReply, usuario: Usuario): Sesion {
   return { usuario, requiereConfiguracion: false };
 }
 
-/** Datos del usuario de la sesión; es la única puerta a la información. */
-const datosDe = (req: FastifyRequest) => almacen.para(req.usuario!.id);
+/** Datos del usuario de la sesión, o del hogar que comparte; es la única puerta a la información. */
+const datosDe = (req: FastifyRequest) => almacen.para(almacen.hogarDe(req.usuario!.id));
 
 function soloAdmin(req: FastifyRequest) {
   if (req.usuario?.rol !== 'admin') throw new ErrorPeticion('Solo el administrador puede hacer esto', 403);
@@ -174,9 +174,19 @@ app.get('/api/usuarios', (req) => {
 
 app.post('/api/usuarios', (req, res) => {
   soloAdmin(req);
-  const { nombre, clave } = (req.body ?? {}) as Record<string, unknown>;
+  const { nombre, clave, hogar } = (req.body ?? {}) as Record<string, unknown>;
   res.code(201);
-  return almacen.crearUsuario(nombre, clave, 'usuario', SEMILLA_BASE);
+  const usuario = almacen.crearUsuario(nombre, clave, 'usuario', SEMILLA_BASE);
+  if (hogar === true) almacen.asignarHogar(usuario.id, almacen.hogarDe(req.usuario!.id));
+  return usuario;
+});
+
+// El administrador mete a un usuario a su hogar (comparten los mismos datos) o lo saca.
+app.put<{ Params: { id: string } }>('/api/usuarios/:id/hogar', (req) => {
+  soloAdmin(req);
+  const compartir = ((req.body ?? {}) as Record<string, unknown>).compartir === true;
+  almacen.asignarHogar(req.params.id, compartir ? almacen.hogarDe(req.usuario!.id) : null);
+  return { ok: true };
 });
 
 app.post<{ Params: { id: string } }>('/api/usuarios/:id/clave', (req) => {
@@ -233,7 +243,8 @@ app.route({
 
 app.get('/api/exportar', (req, res) => {
   res.header('Content-Disposition', `attachment; filename="finanzas-${hoy()}.json"`);
-  return { version: 1, exportado: new Date().toISOString(), ...datosDe(req).leerDatos() };
+  const { miembros: _miembros, ...datos } = datosDe(req).leerDatos();
+  return { version: 1, exportado: new Date().toISOString(), ...datos };
 });
 
 app.post('/api/importar', (req) => {

@@ -1,5 +1,5 @@
-import { pagosRestantes, sumarMeses } from '../shared/calc.ts';
-import type { Categoria, Coleccion, CompraMSI, Gasto, Ingreso, Mes, TipoCategoria } from '../shared/tipos.ts';
+import { pagosRestantes, parteDeSplit, repartir, sumarMeses } from '../shared/calc.ts';
+import type { Categoria, Coleccion, CompraMSI, Gasto, Ingreso, Mes, Persona, Reparto, Split, TipoCategoria } from '../shared/tipos.ts';
 import { fmt, nuevoId } from './ui.ts';
 
 export type Valor = string | boolean | number[];
@@ -15,9 +15,11 @@ export interface Campo {
   opcional?: boolean;
   opciones?: [string, string][];
   crear?: boolean; // el selector ofrece «+ Nueva categoría…»
+  min?: number;
+  max?: number | ((v: Valores) => number | undefined);
   maxDe?: string; // el valor no puede pasar del de ese otro campo
   ayuda?: string;
-  si?: string; // solo se muestra si ese otro campo (check) está activo
+  si?(v: Valores): boolean; // solo se muestra (y se valida) si se cumple
 }
 
 export interface Formulario {
@@ -33,6 +35,86 @@ export const FRECUENCIAS: [string, string][] = [
   ['bimestre', 'por bimestre'],
   ['anio', 'por año'],
 ];
+
+export const PARTES_SPLIT: [string, string][] = [
+  ['iguales', 'Partes iguales'],
+  ['monto', 'Una cantidad'],
+  ['pct', 'Un porcentaje'],
+];
+
+/** El split que describe el formulario, o null si no está activo o aún le faltan datos. */
+function splitDeForm(v: Valores): Split | null {
+  const personas = Number(v.personas);
+  if (!v.split || !Number.isInteger(personas) || personas < 2) return null;
+  if (v.splitTipo === 'iguales') return { personas, tipo: 'iguales' };
+  const tipo = v.splitTipo === 'pct' ? 'pct' : 'monto';
+  const texto = v[tipo === 'pct' ? 'splitPct' : 'splitMonto'];
+  return texto === '' || !(Number(texto) >= 0) ? null : { personas, tipo, valor: Number(texto) };
+}
+
+/** Quiénes comparten el hogar y quién está usando la app. */
+export interface Hogar {
+  miembros: Persona[];
+  yo?: string;
+}
+
+const IGUALES = 'iguales';
+const OTRO = 'otro';
+const SOLO = 'solo:';
+
+/** Campos para repartir un monto entre los miembros del hogar; ninguno si el hogar es de una sola persona. */
+function camposReparto({ miembros }: Hogar, etiqueta: string): Campo[] {
+  if (miembros.length < 2) return [];
+  const otro = (v: Valores) => v.repartoTipo === OTRO;
+  return [
+    {
+      k: 'repartoTipo', etiqueta, tipo: 'select',
+      opciones: [
+        [IGUALES, miembros.length === 2 ? 'Los dos (50/50)' : 'Todos, en partes iguales'],
+        ...miembros.map((m): [string, string] => [SOLO + m.id, `Solo ${m.nombre}`]),
+        [OTRO, 'Otro reparto'],
+      ],
+    },
+    { k: 'repartoDe', etiqueta: 'Quién pone una parte distinta', tipo: 'select', opciones: miembros.map((m) => [m.id, m.nombre]), si: otro },
+    { k: 'repartoModo', etiqueta: 'Su parte es', tipo: 'select', opciones: [['pct', 'Un porcentaje'], ['monto', 'Una cantidad']], si: otro },
+    {
+      k: 'repartoValor', etiqueta: 'Porcentaje o cantidad', tipo: 'numero', si: otro,
+      max: (v) => (v.repartoModo === 'pct' ? 100 : undefined), ayuda: 'El resto se divide entre los demás.',
+    },
+  ];
+}
+
+/** Valores de esos campos para un reparto guardado; sin reparto abre en `porDefecto`. */
+function repartoAForm(r: Reparto | undefined, { miembros }: Hogar, porDefecto = IGUALES) {
+  const vigente = r && miembros.some((m) => m.id === r.de) ? r : undefined;
+  return {
+    repartoTipo: !vigente ? porDefecto : vigente.tipo === 'solo' ? SOLO + vigente.de : OTRO,
+    repartoDe: vigente?.de ?? miembros[0]?.id,
+    repartoModo: vigente && vigente.tipo !== 'solo' ? vigente.tipo : 'pct',
+    repartoValor: vigente && vigente.tipo !== 'solo' ? vigente.valor : undefined,
+  };
+}
+
+function repartoDeForm(v: Valores): Reparto | undefined {
+  const tipo = v.repartoTipo;
+  if (typeof tipo !== 'string' || tipo === IGUALES) return undefined;
+  if (tipo.startsWith(SOLO)) return { tipo: 'solo', de: tipo.slice(SOLO.length) };
+  return { tipo: v.repartoModo === 'monto' ? 'monto' : 'pct', de: v.repartoDe as string, valor: Number(v.repartoValor) };
+}
+
+/** Quita del elemento los campos del formulario de reparto y le pone el reparto que describen. */
+function conReparto(item: Record<string, unknown> & { id: string }, v: Valores, origen: Record<string, unknown> | null) {
+  const { repartoTipo: _tipo, repartoDe: _de, repartoModo: _modo, repartoValor: _valor, ...resto } = item;
+  // Hogar de una persona: el formulario no pregunta, así que se conserva el reparto que ya tuviera.
+  const reparto = 'repartoTipo' in v ? repartoDeForm(v) : origen?.reparto;
+  return (reparto ? { ...resto, reparto } : resto) as Record<string, unknown> & { id: string };
+}
+
+/** "Marco $10,500 · Ana $4,500" con lo que se lleva tecleado; null si no hay a quién repartir. */
+function notaReparto(v: Valores, total: number, { miembros }: Hogar): string | null {
+  if (miembros.length < 2 || !('repartoTipo' in v) || !(total > 0)) return null;
+  return repartir(repartoDeForm(v), total, miembros).map((parte, i) => `${miembros[i].nombre} ${fmt(parte)}`).join(' · ');
+}
 
 export const COLORES: [string, string][] = [
   ['c1', 'Índigo'], ['c2', 'Rosa'], ['c3', 'Ámbar'], ['c4', 'Azul'], ['c5', 'Gris'],
@@ -89,7 +171,7 @@ function categoriaInicial(categorias: Categoria[], tipo: TipoCategoria, actual?:
 }
 
 /** `origen` es el elemento que se edita o, al crear, sus valores iniciales. */
-export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, origen: Record<string, unknown> | null): Formulario {
+export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, origen: Record<string, unknown> | null, hogar: Hogar = { miembros: [] }): Formulario {
   switch (col) {
     case 'ingresos': {
       const campos: Campo[] = [
@@ -101,12 +183,19 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           k: 'hasta', etiqueta: 'Último mes con este ingreso', tipo: 'mes', opcional: true,
           ayuda: 'Déjalos vacíos si llega todos los meses. Para un ingreso de una sola vez (bono, aguinaldo), pon el mismo mes en los dos.',
         },
+        ...camposReparto(hogar, '¿De quién es?'),
       ];
       return {
         titulo: 'ingreso',
         campos,
-        aForm: (item) => aForm(campos, { ...item, categoria: categoriaInicial(categorias, 'ingreso', (item as Ingreso | null)?.categoria) }),
-        deForm: (v, id) => deForm(campos, v, id),
+        nota: (v) => notaReparto(v, Number(v.monto), hogar),
+        aForm(item) {
+          const x = item as Ingreso | null;
+          // Un ingreso nuevo abre a nombre de quien lo captura.
+          const porDefecto = !x && hogar.yo ? SOLO + hogar.yo : IGUALES;
+          return aForm(campos, { ...x, categoria: categoriaInicial(categorias, 'ingreso', x?.categoria), ...repartoAForm(x?.reparto, hogar, porDefecto) });
+        },
+        deForm: (v, id) => conReparto(deForm(campos, v, id), v, origen),
       };
     }
     case 'msi': {
@@ -120,6 +209,7 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           k: 'restantes', etiqueta: 'Pagos restantes', tipo: 'entero', maxDe: 'plazoTotal',
           ayuda: 'Como aparece en tu tarjeta, contando el pago de este mes. Después baja solo, uno cada mes.',
         },
+        ...camposReparto(hogar, '¿Quién la paga?'),
       ];
       const compra = origen as CompraMSI | null;
       const restantesAhora = compra ? pagosRestantes(compra, mes) : null;
@@ -131,11 +221,16 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           const plazo = Number(v.plazoTotal);
           if (!(pago > 0) || !(plazo >= 1)) return null;
           const restantes = Number(v.restantes);
-          return `Total de la compra: ${fmt(pago * plazo)}` + (restantes >= 1 && restantes <= plazo ? ` · faltan ${fmt(pago * restantes)}` : '');
+          const partes = notaReparto(v, pago, hogar);
+          return (
+            `Total de la compra: ${fmt(pago * plazo)}` +
+            (restantes >= 1 && restantes <= plazo ? ` · faltan ${fmt(pago * restantes)}` : '') +
+            (partes ? ` · cada mes: ${partes}` : '')
+          );
         },
-        aForm: (item) => aForm(campos, item ? { ...item, restantes: restantesAhora } : {}),
+        aForm: (item) => aForm(campos, { ...(item && { ...item, restantes: restantesAhora }), ...repartoAForm(compra?.reparto, hogar) }),
         deForm(v, id) {
-          const { restantes, ...c } = deForm(campos, v, id);
+          const { restantes, ...c } = conReparto(deForm(campos, v, id), v, origen);
           // Sin cambios en plazo ni restantes se conserva el inicio (importa en compras que aún no empiezan).
           if (compra && restantes === restantesAhora && c.plazoTotal === compra.plazoTotal) return { ...c, inicio: compra.inicio };
           return { ...c, inicio: sumarMeses(mes, (restantes as number) - (c.plazoTotal as number)) };
@@ -169,19 +264,41 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
       };
     }
     case 'gastos': {
+      const conSplit = (v: Valores) => v.split === true;
       const campos: Campo[] = [
         { k: 'nombre', etiqueta: 'Concepto', tipo: 'texto' },
         campoCategoria(categorias, 'gasto'),
-        { k: 'monto', etiqueta: 'Monto', tipo: 'numero', ayuda: 'Si se cobra por día, es la tarifa de cada día.' },
+        { k: 'monto', etiqueta: 'Monto', tipo: 'numero' },
         { k: 'frecuencia', etiqueta: 'Frecuencia', tipo: 'select', opciones: FRECUENCIAS },
         { k: 'nota', etiqueta: 'Nota', tipo: 'texto', opcional: true },
+        ...camposReparto(hogar, '¿Quién lo paga?'),
         { k: 'recortable', etiqueta: 'Recortable (se puede quitar en un escenario)', tipo: 'check' },
-        { k: 'cobroPorDia', etiqueta: 'Se cobra por día de clases (after school)', tipo: 'check' },
-        { k: 'dias', etiqueta: 'Días de asistencia', tipo: 'dias', si: 'cobroPorDia' },
+        { k: 'split', etiqueta: 'Hacer split de este gasto (se comparte con gente de fuera del hogar)', tipo: 'check' },
+        { k: 'personas', etiqueta: '¿Entre cuántas personas?', tipo: 'entero', min: 2, max: 99, ayuda: 'Contando a tu hogar como una.', si: conSplit },
+        { k: 'splitTipo', etiqueta: 'Tu parte', tipo: 'select', opciones: PARTES_SPLIT, si: conSplit },
+        {
+          k: 'splitMonto', etiqueta: 'Cantidad que te toca', tipo: 'numero', maxDe: 'monto',
+          ayuda: 'En la misma frecuencia que el monto.', si: (v) => conSplit(v) && v.splitTipo === 'monto',
+        },
+        { k: 'splitPct', etiqueta: 'Porcentaje que te toca (%)', tipo: 'numero', max: 100, si: (v) => conSplit(v) && v.splitTipo === 'pct' },
       ];
+      // El cobro por día de clases ya no se ofrece al capturar; un gasto que lo trae lo conserva.
+      const porDia = (origen as Gasto | null)?.porDia;
       return {
         titulo: 'gasto',
         campos,
+        nota(v) {
+          const s = splitDeForm(v);
+          const monto = Number(v.monto);
+          if (!(monto > 0)) return null;
+          const frecuencia = porDia ? 'por día' : (FRECUENCIAS.find(([f]) => f === v.frecuencia)?.[1] ?? '');
+          const parte = s ? parteDeSplit(s, monto) : monto;
+          const lineas = [
+            s && `${hogar.miembros.length > 1 ? 'Parte del hogar' : 'Tu parte'}: ${fmt(parte)} ${frecuencia} de ${fmt(monto)}`,
+            notaReparto(v, parte, hogar),
+          ].filter(Boolean);
+          return lineas.length ? lineas.join(' · ') : null;
+        },
         aForm(item) {
           const g = item as Gasto | null;
           return aForm(campos, {
@@ -189,14 +306,21 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
             ...g,
             categoria: categoriaInicial(categorias, 'gasto', g?.categoria),
             monto: g?.porDia ? g.porDia.tarifa : g?.monto,
-            cobroPorDia: !!g?.porDia,
-            dias: g?.porDia?.diasSemana ?? [1, 2, 3],
+            split: !!g?.split,
+            personas: g?.split?.personas ?? 2,
+            splitTipo: g?.split?.tipo ?? 'iguales',
+            splitMonto: g?.split?.tipo === 'monto' ? g.split.valor : undefined,
+            splitPct: g?.split?.tipo === 'pct' ? g.split.valor : undefined,
+            ...repartoAForm(g?.reparto, hogar),
           });
         },
         deForm(v, id) {
-          const { cobroPorDia, dias, ...g } = deForm(campos, v, id);
-          if (!cobroPorDia) return g;
-          return { ...g, frecuencia: 'mes', porDia: { tarifa: g.monto, diasSemana: dias } };
+          const { split: _split, personas: _personas, splitTipo: _tipo, splitMonto: _monto, splitPct: _pct, ...g } = conReparto(deForm(campos, v, id), v, origen);
+          return {
+            ...g,
+            ...(porDia && { frecuencia: 'mes', porDia: { ...porDia, tarifa: g.monto } }),
+            ...(v.split === true && { split: splitDeForm(v) }),
+          };
         },
       };
     }

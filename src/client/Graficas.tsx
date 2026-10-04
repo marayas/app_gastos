@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { FilaLiquidez } from '../shared/calc.ts';
+import type { Mes } from '../shared/tipos.ts';
 import { fmt, mesCorto, mesLargo, pct } from './ui.ts';
 
 export interface Parte {
@@ -43,21 +45,56 @@ export function Ranking({ partes, base, tono, sobrante }: RankingProps) {
   );
 }
 
-/** Columnas de liquidez por mes. Los valores exactos están en el tooltip y en la tabla de Pagos. */
+/** Columnas de liquidez por mes. Al tocar un mes se despliega debajo su detalle. */
 export function Columnas({ filas, grande }: { filas: FilaLiquidez[]; grande?: boolean }) {
+  const [elegido, setElegido] = useState<Mes | null>(null);
   const max = Math.max(...filas.map((f) => Math.abs(f.liquidez)), 1);
+  const sel = filas.find((f) => f.mes === elegido);
   return (
-    <div className={'spark' + (grande ? ' big' : '')} role="img" aria-label="Liquidez proyectada por mes">
-      {filas.map((f, i) => (
-        <div
-          key={f.mes} className={'col' + (f.liquidez < 0 ? ' neg' : '')} tabIndex={0}
-          data-tip={`${mesLargo(f.mes)}: ${fmt(f.liquidez)}`}
-        >
-          <i className="rise" style={{ height: `${Math.max((Math.abs(f.liquidez) / max) * 100, 3)}%`, animationDelay: `${i * 35}ms` }} />
-          <span>{mesCorto(f.mes).slice(0, 3)}</span>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className={'spark' + (grande ? ' big' : '')} role="group" aria-label="Liquidez proyectada por mes">
+        {filas.map((f, i) => (
+          <button
+            key={f.mes} type="button" className={'col' + (f.liquidez < 0 ? ' neg' : '')}
+            aria-pressed={f.mes === elegido} aria-label={`${mesLargo(f.mes)}: ${fmt(f.liquidez)}`}
+            data-tip={`${mesLargo(f.mes)}: ${fmt(f.liquidez)}`}
+            onClick={() => setElegido(f.mes === elegido ? null : f.mes)}
+          >
+            <i className="rise" style={{ height: `${Math.max((Math.abs(f.liquidez) / max) * 100, 3)}%`, animationDelay: `${i * 35}ms` }} />
+            <span>{mesCorto(f.mes).slice(0, 3)}</span>
+          </button>
+        ))}
+      </div>
+      {sel && <DetalleMes key={sel.mes} fila={sel} cerrar={() => setElegido(null)} />}
+    </>
+  );
+}
+
+function DetalleMes({ fila, cerrar }: { fila: FilaLiquidez; cerrar(): void }) {
+  const egresos = fila.fijos + fila.msi;
+  return (
+    <section className="mesdet" aria-live="polite" aria-label={`Detalle de ${mesLargo(fila.mes)}`}>
+      <header>
+        <h3>{mesLargo(fila.mes)}</h3>
+        <button type="button" className="link" onClick={cerrar}>Cerrar</button>
+      </header>
+      <dl>
+        <div><dt>Ingresos</dt><dd>{fmt(fila.ingreso)}</dd></div>
+        <div><dt>Gastos fijos</dt><dd>{fmt(fila.fijos)}</dd></div>
+        <div><dt>Meses sin intereses</dt><dd>{fmt(fila.msi)}</dd></div>
+        <div className="tot"><dt>Liquidez</dt><dd className={fila.liquidez < 0 ? 'neg' : ''}>{fmt(fila.liquidez)}</dd></div>
+      </dl>
+      <div className="meter" role="img" aria-label={`Egresos: ${pct(egresos, fila.ingreso)} del ingreso`}>
+        <i className="grow" style={{ width: `${Math.min(fila.ingreso ? egresos / fila.ingreso : 1, 1) * 100}%` }} />
+      </div>
+      <p className="note">
+        {fila.ingreso === 0
+          ? 'No hay ingresos registrados para este mes.'
+          : fila.liquidez < 0
+            ? <>Los egresos rebasan el ingreso por <b className="neg">{fmt(-fila.liquidez)}</b>.</>
+            : <>Los egresos usan <b>{pct(egresos, fila.ingreso)}</b> del ingreso y queda <b>{pct(fila.liquidez, fila.ingreso)}</b> libre.</>}
+      </p>
+    </section>
   );
 }
 

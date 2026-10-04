@@ -8,7 +8,9 @@ import {
   msiRestanteTotal,
   pagosRestantes,
   proyeccion,
+  repartir,
   resumen,
+  resumenPorPersona,
   sumarMeses,
   ultimoMesMSI,
 } from '../shared/calc.ts';
@@ -25,6 +27,12 @@ const MSI = 'Meses sin intereses';
 function nombresDeCategoria(d: Datos) {
   const nombres = new Map(d.categorias.map((c) => [c.id, c.nombre]));
   return (id: string | undefined) => (id ? (nombres.get(id) ?? id) : 'Sin categoría');
+}
+
+/** Montos por miembro del hogar; null si el hogar es de una sola persona. */
+function porPersona(d: Datos, partes: number[]) {
+  const miembros = d.miembros ?? [];
+  return miembros.length > 1 ? miembros.map((m, i) => ({ persona: m.nombre, monto: r2(partes[i]) })) : null;
 }
 
 const porTotal = (a: { total: number }, b: { total: number }) => b.total - a.total;
@@ -48,6 +56,13 @@ export function informeResumen(d: Datos, mes: Mes, periodo: 'mes' | 'anio') {
     ]
       .filter((c) => c.total > 0)
       .sort(porTotal),
+    // Hogar de varias personas: lo que gana, lo que le toca aportar y lo que le queda a cada una.
+    porPersona:
+      (d.miembros ?? []).length > 1
+        ? resumenPorPersona(d, mes, periodo).map((p) => ({
+            persona: p.persona.nombre, ingresos: r2(p.ingresos), leTocaAportar: r2(p.egresos), leQueda: r2(p.sobrante),
+          }))
+        : null,
     nota: periodo === 'anio' ? 'En la vista de 12 meses, MSI es lo que falta pagar en total.' : undefined,
   };
 }
@@ -95,7 +110,12 @@ export function informeGastos(d: Datos, mes: Mes, categoria?: string) {
       monto: r2(g.porDia ? g.porDia.tarifa : g.monto),
       frecuencia: g.porDia ? 'por día de clases' : g.frecuencia === 'anio' ? 'año' : g.frecuencia,
       costoEsteMes: r2(gastoDelMes(d, g, mes)),
-      equivalenteMensual: g.porDia ? null : r2(g.monto * FACTOR[g.frecuencia]),
+      equivalenteMensual: g.porDia ? null : r2(gastoDelMes(d, g, mes)),
+      // Compartido con gente de fuera del hogar: `monto` es el total y los costos ya son solo la parte del hogar.
+      compartido: g.split
+        ? { personas: g.split.personas, parteDelHogar: g.split.tipo === 'iguales' ? 'partes iguales' : g.split.tipo === 'pct' ? `${g.split.valor}%` : r2(g.split.valor ?? 0) }
+        : null,
+      repartoEsteMes: porPersona(d, repartir(g.reparto, gastoDelMes(d, g, mes), d.miembros ?? [], FACTOR[g.frecuencia])),
       recortable: g.recortable === true,
       nota: g.nota ?? null,
     }))

@@ -36,6 +36,52 @@ describe('datos de un usuario', () => {
     expect(a.leerDatos().gastos.some((x) => x.id === id)).toBe(false);
   });
 
+  it('guarda y quita el split de un gasto', () => {
+    const { a } = conAdmin();
+    const gasto = { nombre: 'Renta', categoria: 'casa', monto: 12000, frecuencia: 'mes' };
+    const { id } = a.crear('gastos', { ...gasto, split: { personas: 2, tipo: 'pct', valor: 60 } });
+    const leer = () => a.leerDatos().gastos.find((x) => x.id === id) as Gasto;
+    expect(leer().split).toEqual({ personas: 2, tipo: 'pct', valor: 60 });
+    a.actualizar('gastos', id, gasto);
+    expect(leer().split).toBeUndefined();
+    expect(() => a.crear('gastos', { ...gasto, split: { personas: 1, tipo: 'iguales' } })).toThrow();
+    expect(() => a.crear('gastos', { ...gasto, split: { personas: 2, tipo: 'pct', valor: 120 } })).toThrow();
+  });
+
+  it('hogar compartido: el otro usuario ve y edita los mismos datos, y puede volver a los suyos', () => {
+    const { almacen, admin, a } = conAdmin();
+    const ana = almacen.crearUsuario('Ana', 'secreto-largo', 'usuario', SEMILLA_BASE);
+    const deAna = () => almacen.para(almacen.hogarDe(ana.id));
+    expect(deAna().leerDatos().gastos).toEqual([]);
+    expect(a.leerDatos().miembros).toEqual([{ id: admin.id, nombre: 'Admin' }]);
+
+    almacen.asignarHogar(ana.id, admin.id);
+    expect(almacen.hogarDe(ana.id)).toBe(admin.id);
+    expect(deAna().leerDatos().gastos).toHaveLength(EJEMPLO.gastos.length);
+    expect(deAna().leerDatos().miembros).toEqual([{ id: admin.id, nombre: 'Admin' }, { id: ana.id, nombre: 'Ana' }]);
+
+    // Lo que captura Ana queda en los datos del hogar, con su reparto.
+    const { id } = deAna().crear('gastos', { nombre: 'Gym', categoria: 'salud', monto: 800, frecuencia: 'mes', reparto: { tipo: 'solo', de: ana.id } });
+    deAna().crear('ingresos', { nombre: 'Sueldo de Ana', monto: 1000, reparto: { tipo: 'pct', de: ana.id, valor: 100 } });
+    expect((a.leerDatos().gastos.find((g) => g.id === id) as Gasto).reparto).toEqual({ tipo: 'solo', de: ana.id });
+    expect(() => a.crear('gastos', { nombre: 'X', categoria: 'salud', monto: 1, frecuencia: 'mes', reparto: { tipo: 'pct', de: ana.id, valor: 101 } })).toThrow();
+    expect(() => a.crear('gastos', { nombre: 'X', categoria: 'salud', monto: 1, frecuencia: 'mes', reparto: { tipo: 'solo' } })).toThrow();
+
+    expect(() => almacen.asignarHogar(admin.id, ana.id)).toThrow(); // el dueño de un hogar con miembros no se muda
+    almacen.asignarHogar(ana.id, null);
+    expect(deAna().leerDatos().gastos).toEqual([]);
+    expect(a.leerDatos().gastos.some((g) => g.id === id)).toBe(true);
+  });
+
+  it('al borrar al dueño de un hogar, sus miembros vuelven a sus propios datos', () => {
+    const { almacen } = conAdmin();
+    const ana = almacen.crearUsuario('Ana', 'secreto-largo', 'usuario', SEMILLA_BASE);
+    const luis = almacen.crearUsuario('Luis', 'secreto-largo', 'usuario', SEMILLA_BASE);
+    almacen.asignarHogar(luis.id, ana.id);
+    almacen.borrarUsuario(ana.id);
+    expect(almacen.hogarDe(luis.id)).toBe(luis.id);
+  });
+
   it('rechaza datos inválidos', () => {
     const { a } = conAdmin();
     expect(() => a.crear('gastos', { nombre: 'X', categoria: 'salud', monto: -1, frecuencia: 'mes' })).toThrow();
@@ -50,14 +96,14 @@ describe('datos de un usuario', () => {
     a.marcarPago('2026-10', 'carro', true);
     a.marcarPago('2026-11', 'carro', true);
     a.reiniciarMes('2026-10');
-    const respaldo = a.leerDatos();
+    const { miembros: _miembros, ...respaldo } = a.leerDatos(); // los miembros del hogar no van en el respaldo
     expect(respaldo.pagos).toEqual([{ mes: '2026-11', itemId: 'carro' }]);
 
     const b = almacen.para(almacen.crearUsuario('Otra', 'secreto-largo', 'usuario', SEMILLA_BASE).id);
     b.importar(JSON.parse(JSON.stringify(respaldo)));
-    expect(b.leerDatos()).toEqual(respaldo);
+    expect(b.leerDatos()).toMatchObject(respaldo);
     expect(() => b.importar({ gastos: [] })).toThrow();
-    expect(b.leerDatos()).toEqual(respaldo); // un respaldo inválido no borra nada
+    expect(b.leerDatos()).toMatchObject(respaldo); // un respaldo inválido no borra nada
   });
 });
 
@@ -146,7 +192,7 @@ describe('usuarios y segregación', () => {
     expect(almacen.verificarClave('admin', 'secreto-largo')).toEqual(admin);
     expect(almacen.verificarClave('Admin', 'otra-clave')).toBeNull();
     expect(almacen.verificarClave('nadie', 'secreto-largo')).toBeNull();
-    expect(Object.keys(almacen.listarUsuarios()[0]).sort()).toEqual(['id', 'nombre', 'rol']);
+    expect(Object.keys(almacen.listarUsuarios()[0]).sort()).toEqual(['hogar', 'id', 'nombre', 'rol']);
   });
 
   it('las sesiones se cierran al salir y al cambiar la contraseña', () => {
@@ -175,7 +221,7 @@ describe('usuarios y segregación', () => {
     almacen.borrarUsuario(ana.id);
     expect(almacen.usuarioDeSesion(token)).toBeNull();
     expect(almacen.para(ana.id).leerDatos().categorias).toEqual([]);
-    expect(almacen.listarUsuarios()).toEqual([admin]);
+    expect(almacen.listarUsuarios()).toEqual([{ ...admin, hogar: null }]);
     expect(() => almacen.borrarUsuario(admin.id)).toThrow();
     expect(a.leerDatos().gastos).toHaveLength(EJEMPLO.gastos.length);
   });
