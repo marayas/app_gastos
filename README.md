@@ -28,11 +28,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Para actualizar, repite los mismos dos comandos. Si el paquete de GHCR es privado, primero inicia sesión en el servidor con un token personal con permiso `read:packages`:
-
-```sh
-echo TU_TOKEN | docker login ghcr.io -u marayas --password-stdin
-```
+Para actualizar, repite los mismos dos comandos. La imagen es pública, así que no hace falta iniciar sesión en GHCR.
 
 Para construir la imagen en el propio servidor en lugar de bajarla: `docker compose up -d --build`.
 

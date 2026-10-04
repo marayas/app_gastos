@@ -152,3 +152,4 @@ dialog h2{margin:0}
 .sub2 + *{margin-top:6px}
 .field select + input{margin-top:6px}
 .catrow.subcat td{font-weight:500;color:var(--mute);padding-top:8px;font-size:13px}
+.calc{color:var(--ink);font-weight:700}

@@ -1,5 +1,6 @@
-import type { Categoria, Coleccion, Gasto, Ingreso, Mes, TipoCategoria } from '../shared/tipos.ts';
-import { nuevoId } from './ui.ts';
+import { pagosRestantes, sumarMeses } from '../shared/calc.ts';
+import type { Categoria, Coleccion, CompraMSI, Gasto, Ingreso, Mes, TipoCategoria } from '../shared/tipos.ts';
+import { fmt, nuevoId } from './ui.ts';
 
 export type Valor = string | boolean | number[];
 export type Valores = Record<string, Valor>;
@@ -14,6 +15,7 @@ export interface Campo {
   opcional?: boolean;
   opciones?: [string, string][];
   crear?: boolean; // el selector ofrece «+ Nueva categoría…»
+  maxDe?: string; // el valor no puede pasar del de ese otro campo
   ayuda?: string;
   si?: string; // solo se muestra si ese otro campo (check) está activo
 }
@@ -21,6 +23,7 @@ export interface Campo {
 export interface Formulario {
   titulo: string;
   campos: Campo[];
+  nota?(v: Valores): string | null; // resumen calculado con lo que se va tecleando
   aForm(item: Record<string, unknown> | null): Valores;
   deForm(v: Valores, id: string): Record<string, unknown> & { id: string };
 }
@@ -106,17 +109,46 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
         deForm: (v, id) => deForm(campos, v, id),
       };
     }
-    case 'msi':
-      return simple(
-        'compra a MSI',
-        [
-          { k: 'nombre', etiqueta: 'Compra', tipo: 'texto' },
-          { k: 'pagoMensual', etiqueta: 'Pago mensual', tipo: 'numero' },
-          { k: 'plazoTotal', etiqueta: 'Plazo total (número de pagos)', tipo: 'entero' },
-          { k: 'inicio', etiqueta: 'Mes del primer pago', tipo: 'mes', ayuda: 'Los pagos restantes se calculan solos con la fecha de hoy.' },
-        ],
-        { inicio: mes },
-      );
+    case 'msi': {
+      // Se captura lo que se sabe de la compra: monto, plazo y pagos que faltan según la tarjeta.
+      // De ahí salen el pago mensual y el mes del primer pago, y los restantes bajan solos cada mes.
+      const campos: Campo[] = [
+        { k: 'nombre', etiqueta: 'Compra', tipo: 'texto' },
+        { k: 'total', etiqueta: 'Monto total de la compra', tipo: 'numero' },
+        { k: 'plazoTotal', etiqueta: 'Plazo total (número de meses)', tipo: 'entero' },
+        {
+          k: 'restantes', etiqueta: 'Pagos restantes', tipo: 'entero', maxDe: 'plazoTotal',
+          ayuda: 'Como aparece en tu tarjeta, contando el pago de este mes. Después baja solo, uno cada mes.',
+        },
+      ];
+      const compra = origen as CompraMSI | null;
+      const restantesAhora = compra ? pagosRestantes(compra, mes) : null;
+      const totalAhora = compra ? Math.round(compra.pagoMensual * compra.plazoTotal * 100) / 100 : null;
+      return {
+        titulo: 'compra a MSI',
+        campos,
+        nota(v) {
+          const total = Number(v.total);
+          const plazo = Number(v.plazoTotal);
+          if (!(total > 0) || !(plazo >= 1)) return null;
+          const pago = total / plazo;
+          const restantes = Number(v.restantes);
+          return `Pago mensual: ${fmt(pago)}` + (restantes >= 1 && restantes <= plazo ? ` · faltan ${fmt(pago * restantes)}` : '');
+        },
+        aForm: (item) => aForm(campos, item ? { ...item, total: totalAhora, restantes: restantesAhora } : {}),
+        deForm(v, id) {
+          const { total, restantes, ...c } = deForm(campos, v, id);
+          const plazo = c.plazoTotal as number;
+          const sinCambioDePlazo = compra && plazo === compra.plazoTotal;
+          return {
+            ...c,
+            // Lo que no se tocó se conserva exacto: ni se redondea el pago ni se mueve el inicio.
+            pagoMensual: sinCambioDePlazo && total === totalAhora ? compra.pagoMensual : (total as number) / plazo,
+            inicio: sinCambioDePlazo && restantes === restantesAhora ? compra.inicio : sumarMeses(mes, (restantes as number) - plazo),
+          };
+        },
+      };
+    }
     case 'ciclos':
       return simple('ciclo escolar', [
         { k: 'nombre', etiqueta: 'Nombre', tipo: 'texto' },

@@ -74,6 +74,7 @@ export function Dialogo({ form, item, onGuardar, onBorrar, onCerrar }: Props) {
         <input
           id={id} type="number" inputMode={c.tipo === 'entero' ? 'numeric' : 'decimal'}
           min={c.tipo === 'entero' ? 1 : 0} step={c.tipo === 'entero' ? 1 : 'any'}
+          max={c.maxDe && v[c.maxDe] !== '' ? Number(v[c.maxDe]) : undefined}
           value={valor} onChange={(e) => set(c.k, e.target.value)} required
         />
       );
@@ -112,6 +113,7 @@ export function Dialogo({ form, item, onGuardar, onBorrar, onCerrar }: Props) {
       >
         <h2>{item ? 'Editar' : 'Agregar'} {form.titulo}</h2>
         {form.campos.map(campo)}
+        {form.nota?.(v) && <p className="note first calc" role="status">{form.nota(v)}</p>}
         <div className="actions">
           {onBorrar && (
             <button type="button" className="ghost danger" onClick={onBorrar}>Borrar</button>

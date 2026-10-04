@@ -270,7 +270,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                     <tr key={c.id}>
                       <td><button className="link" onClick={() => abrir('msi', c)}>{c.nombre}</button></td>
                       <td className="r">{fmt(c.pagoMensual)}</td>
-                      <td>{k} {k === 1 ? 'pago restante' : 'pagos restantes'}</td>
+                      <td>{k} de {c.plazoTotal} {k === 1 ? 'pago restante' : 'pagos restantes'}</td>
                       <td className="r">{fmt(anual ? c.pagoMensual * k : c.inicio <= mes ? c.pagoMensual : 0)}</td>
                     </tr>
                   );

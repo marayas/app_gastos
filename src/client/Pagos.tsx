@@ -74,7 +74,7 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
         detalle={
           k === 0
             ? `Terminó en ${mesLargo(finMSI(c))}`
-            : `${activa ? '' : `Empieza en ${mesLargo(c.inicio)} · `}${k} de ${c.plazoTotal} ${k === 1 ? 'pago restante' : 'pagos restantes'} · termina en ${mesLargo(finMSI(c))}`
+            : `${activa ? '' : `Empieza en ${mesLargo(c.inicio)} · `}${k} de ${c.plazoTotal} ${k === 1 ? 'pago restante' : 'pagos restantes'} · faltan ${fmt(c.pagoMensual * k)} · termina en ${mesLargo(finMSI(c))}`
         }
       />
     );
