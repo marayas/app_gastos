@@ -110,11 +110,11 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
       };
     }
     case 'msi': {
-      // Se captura lo que se sabe de la compra: monto, plazo y pagos que faltan según la tarjeta.
-      // De ahí salen el pago mensual y el mes del primer pago, y los restantes bajan solos cada mes.
+      // Se captura lo que dice el estado de cuenta: pago mensual, plazo y pagos que faltan.
+      // De ahí salen el total de la compra y el mes del primer pago, y los restantes bajan solos cada mes.
       const campos: Campo[] = [
         { k: 'nombre', etiqueta: 'Compra', tipo: 'texto' },
-        { k: 'total', etiqueta: 'Monto total de la compra', tipo: 'numero' },
+        { k: 'pagoMensual', etiqueta: 'Pago mensual', tipo: 'numero' },
         { k: 'plazoTotal', etiqueta: 'Plazo total (número de meses)', tipo: 'entero' },
         {
           k: 'restantes', etiqueta: 'Pagos restantes', tipo: 'entero', maxDe: 'plazoTotal',
@@ -123,29 +123,22 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
       ];
       const compra = origen as CompraMSI | null;
       const restantesAhora = compra ? pagosRestantes(compra, mes) : null;
-      const totalAhora = compra ? Math.round(compra.pagoMensual * compra.plazoTotal * 100) / 100 : null;
       return {
         titulo: 'compra a MSI',
         campos,
         nota(v) {
-          const total = Number(v.total);
+          const pago = Number(v.pagoMensual);
           const plazo = Number(v.plazoTotal);
-          if (!(total > 0) || !(plazo >= 1)) return null;
-          const pago = total / plazo;
+          if (!(pago > 0) || !(plazo >= 1)) return null;
           const restantes = Number(v.restantes);
-          return `Pago mensual: ${fmt(pago)}` + (restantes >= 1 && restantes <= plazo ? ` · faltan ${fmt(pago * restantes)}` : '');
+          return `Total de la compra: ${fmt(pago * plazo)}` + (restantes >= 1 && restantes <= plazo ? ` · faltan ${fmt(pago * restantes)}` : '');
         },
-        aForm: (item) => aForm(campos, item ? { ...item, total: totalAhora, restantes: restantesAhora } : {}),
+        aForm: (item) => aForm(campos, item ? { ...item, restantes: restantesAhora } : {}),
         deForm(v, id) {
-          const { total, restantes, ...c } = deForm(campos, v, id);
-          const plazo = c.plazoTotal as number;
-          const sinCambioDePlazo = compra && plazo === compra.plazoTotal;
-          return {
-            ...c,
-            // Lo que no se tocó se conserva exacto: ni se redondea el pago ni se mueve el inicio.
-            pagoMensual: sinCambioDePlazo && total === totalAhora ? compra.pagoMensual : (total as number) / plazo,
-            inicio: sinCambioDePlazo && restantes === restantesAhora ? compra.inicio : sumarMeses(mes, (restantes as number) - plazo),
-          };
+          const { restantes, ...c } = deForm(campos, v, id);
+          // Sin cambios en plazo ni restantes se conserva el inicio (importa en compras que aún no empiezan).
+          if (compra && restantes === restantesAhora && c.plazoTotal === compra.plazoTotal) return { ...c, inicio: compra.inicio };
+          return { ...c, inicio: sumarMeses(mes, (restantes as number) - (c.plazoTotal as number)) };
         },
       };
     }
