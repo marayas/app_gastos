@@ -1,4 +1,4 @@
-import { diasConClases, gastoDelMes, gastoTerminado, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen, resumenPorPersona } from '../shared/calc.ts';
+import { diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen, resumenPorPersona } from '../shared/calc.ts';
 import type { Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
 import { deTipo, FRECUENCIAS } from './formularios.ts';
 import { Columnas, Ranking } from './Graficas.tsx';
@@ -273,7 +273,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                         {reparto(c) && <small>{reparto(c)}</small>}
                       </td>
                       <td className="r">{fmt(c.pagoMensual)}</td>
-                      <td>{k} de {c.plazoTotal} {k === 1 ? 'pago restante' : 'pagos restantes'}</td>
+                      <td>{k} de {c.plazoTotal} {k === 1 ? 'pago restante' : 'pagos restantes'}<small>termina en {mesLargo(finMSI(c))}</small></td>
                       <td className="r">{fmt(anual ? c.pagoMensual * k : c.inicio <= mes ? c.pagoMensual : 0)}</td>
                     </tr>
                   );
