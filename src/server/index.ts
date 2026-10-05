@@ -69,7 +69,7 @@ function ponerCookie(res: FastifyReply, token: string | null) {
 
 function iniciarSesion(res: FastifyReply, usuario: Usuario): Sesion {
   ponerCookie(res, almacen.crearSesion(usuario.id));
-  return { usuario, requiereConfiguracion: false };
+  return { usuario, requiereConfiguracion: false, tema: almacen.temaDe(usuario.id) };
 }
 
 /** Datos del usuario de la sesión, o del hogar que comparte; es la única puerta a la información. */
@@ -115,7 +115,13 @@ app.get('/health', () => ({ ok: true }));
 
 // --- Sesión ---
 
-app.get('/api/sesion', (req): Sesion => ({ usuario: req.usuario, requiereConfiguracion: !almacen.hayUsuarios() }));
+app.get('/api/sesion', (req): Sesion => ({
+  usuario: req.usuario,
+  requiereConfiguracion: !almacen.hayUsuarios(),
+  tema: req.usuario ? almacen.temaDe(req.usuario.id) : null,
+}));
+
+app.put('/api/tema', (req) => almacen.guardarTema(req.usuario!.id, req.body));
 
 // Primera vez: quien abre la app crea la cuenta de administrador. Empieza limpia, como todas.
 app.post('/api/configurar', (req, res) => {

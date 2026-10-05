@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Coleccion, Datos, Sesion, Usuario } from '../shared/tipos.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Coleccion, Datos, Sesion, Tema, Usuario } from '../shared/tipos.ts';
 import { Acceso } from './Acceso.tsx';
+import { Config, aplicarTema, cambiaDeModo, modoVisible, TEMA_INICIAL } from './Config.tsx';
 import { Cuenta } from './Cuenta.tsx';
 import { DatosTab } from './DatosTab.tsx';
 import { Dialogo } from './Dialogo.tsx';
@@ -15,27 +16,33 @@ const TABS = [
   ['resumen', 'Resumen', 'Tu dinero, de un vistazo'],
   ['pagos', 'Pagos', 'Pagos del mes'],
   ['datos', 'Datos', 'Tus datos'],
-  ['cuenta', 'Cuenta', 'Tu cuenta'],
 ] as const;
-type Tab = (typeof TABS)[number][0];
+// Cuenta y Configuración no van en la navegación: se abren desde el menú del usuario.
+const DEL_USUARIO = [
+  ['cuenta', 'Cuenta', 'Tu cuenta'],
+  ['config', 'Configuración', 'Configuración'],
+] as const;
+type Tab = (typeof TABS)[number][0] | (typeof DEL_USUARIO)[number][0];
 
 // ?hoy=AAAA-MM-DD simula otra fecha para ver cómo se mueve el calendario sin tocar los datos.
 const simulada = new URLSearchParams(location.search).get('hoy');
 const HOY_SIMULADO = simulada && /^\d{4}-\d{2}-\d{2}$/.test(simulada) ? simulada : null;
 
-type Tema = 'auto' | 'light' | 'dark';
-
 export function App() {
-  const [tema, setTema] = usePref<Tema>('tema', 'auto');
-  useEffect(() => {
-    if (tema === 'auto') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = tema;
-  }, [tema]);
-  const oscuro = tema === 'dark' || (tema === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  const alternarTema = () => setTema(oscuro ? 'light' : 'dark');
+  // El tema vive en la cuenta; la copia de este navegador evita el parpadeo al abrir y viste la pantalla de acceso.
+  const [tema, setTema] = usePref<Tema>('apariencia', TEMA_INICIAL);
+  useEffect(() => aplicarTema(tema), [tema]);
 
   const [sesion, setSesion] = useState<Sesion | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Al entrar manda el tema de la cuenta; quien aún no elige ve el original, no el del usuario anterior en este navegador.
+  useEffect(() => {
+    if (sesion?.usuario) setTema(sesion.tema ?? TEMA_INICIAL);
+  }, [sesion, setTema]);
+  const cambiarTema = (t: Tema) => {
+    setTema(t);
+    api('PUT', '/api/tema', t).catch((e) => setError('No se pudo guardar el tema: ' + mensaje(e)));
+  };
 
   const revisar = useCallback(() => {
     api<Sesion>('GET', '/api/sesion').then(setSesion, (e) => setError('No se pudo conectar con el servidor: ' + mensaje(e)));
@@ -54,21 +61,30 @@ export function App() {
 
   const salir = () => api('POST', '/api/salir').finally(revisar);
   // key: al cambiar de usuario se descarta todo el estado del anterior.
-  return <Panel key={sesion.usuario.id} usuario={sesion.usuario} onSalir={salir} oscuro={oscuro} onTema={alternarTema} />;
+  return <Panel key={sesion.usuario.id} usuario={sesion.usuario} onSalir={salir} tema={tema} onTema={cambiarTema} />;
 }
 
 interface PanelProps {
   usuario: Usuario;
   onSalir(): void;
-  oscuro: boolean;
-  onTema(): void;
+  tema: Tema;
+  onTema(t: Tema): void;
 }
 
-function Panel({ usuario, onSalir, oscuro, onTema }: PanelProps) {
+function Panel({ usuario, onSalir, tema, onTema }: PanelProps) {
   const store = useDatos();
   const { estado, error } = store;
   const [tab, setTab] = usePref<Tab>('tab', 'resumen');
   const [excluidos, setExcluidos] = usePref<string[]>(`escenario:${usuario.id}`, []);
+  const [menu, setMenu] = useState(false);
+  const refMenu = useRef<HTMLDivElement>(null);
+  // El menú del usuario se cierra al tocar fuera (Safari no da foco a los botones, así que no basta con blur).
+  useEffect(() => {
+    if (!menu) return;
+    const fuera = (e: PointerEvent) => !refMenu.current?.contains(e.target as Node) && setMenu(false);
+    document.addEventListener('pointerdown', fuera);
+    return () => document.removeEventListener('pointerdown', fuera);
+  }, [menu]);
   const [edicion, setEdicion] = useState<{ col: Coleccion; item: Item | null; base?: Record<string, unknown> } | null>(null);
 
   // Escenario: los gastos recortados dejan de contar, pero siguen guardados.
@@ -104,7 +120,8 @@ function Panel({ usuario, onSalir, oscuro, onTema }: PanelProps) {
     store.guardar(col, item);
   }
 
-  const titulo = TABS.find(([id]) => id === tab)![2];
+  const oscuro = modoVisible(tema) === 'dark';
+  const titulo = [...TABS, ...DEL_USUARIO].find(([id]) => id === tab)?.[2] ?? '';
 
   return (
     <div className="app">
@@ -117,11 +134,29 @@ function Panel({ usuario, onSalir, oscuro, onTema }: PanelProps) {
             </button>
           ))}
         </nav>
-        <div className="user">
-          <button className="iconbtn" onClick={onTema} aria-label={oscuro ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}>
+        <div
+          className="user" ref={refMenu}
+          onKeyDown={(e) => e.key === 'Escape' && setMenu(false)}
+        >
+          <button
+            className="iconbtn" disabled={!cambiaDeModo(tema)} onClick={() => onTema({ ...tema, modo: oscuro ? 'light' : 'dark' })}
+            aria-label={oscuro ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+            title={cambiaDeModo(tema) ? undefined : 'Este tema solo tiene un modo'}
+          >
             <Icono n={oscuro ? 'sol' : 'luna'} />
           </button>
-          <span className="chip">{usuario.nombre}</span>
+          <button className="chip" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+            <span>{usuario.nombre}</span><Icono n="abajo" s={14} />
+          </button>
+          {menu && (
+            <div className="menu" role="menu">
+              {DEL_USUARIO.map(([id, nombre]) => (
+                <button key={id} role="menuitem" aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); setMenu(false); }}>
+                  <Icono n={id} />{nombre}
+                </button>
+              ))}
+            </div>
+          )}
           <button className="iconbtn" onClick={onSalir} aria-label="Salir"><Icono n="salir" /></button>
         </div>
       </header>
@@ -142,6 +177,7 @@ function Panel({ usuario, onSalir, oscuro, onTema }: PanelProps) {
       {tab === 'pagos' && <Pagos real={estado} datos={datos} mes={mes} store={store} abrir={abrir} />}
       {tab === 'datos' && <DatosTab real={estado} mes={mes} store={store} abrir={abrir} />}
       {tab === 'cuenta' && <Cuenta usuario={usuario} />}
+      {tab === 'config' && <Config tema={tema} onTema={onTema} />}
 
       {edicion && form && (
         <Dialogo

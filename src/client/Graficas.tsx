@@ -15,16 +15,17 @@ interface RankingProps {
   base: number; // el 100 % de la barra (el ingreso del periodo)
   tono: 'in' | 'out';
   sobrante?: { nombre: string; total: number };
+  columnas?: boolean; // en pantalla ancha reparte la lista en dos columnas
 }
 
 /**
  * Lista ordenada con una barra de un solo tono por renglón: el largo es la parte del ingreso.
  * El punto de color solo identifica la categoría junto a su nombre; no codifica nada por sí solo.
  */
-export function Ranking({ partes, base, tono, sobrante }: RankingProps) {
+export function Ranking({ partes, base, tono, sobrante, columnas }: RankingProps) {
   const ancho = (v: number) => `${Math.min(Math.max((v / (base || 1)) * 100, 0), 100)}%`;
   return (
-    <ul className="rank">
+    <ul className={'rank' + (columnas ? ' cols' : '')}>
       {partes.map((p) => (
         <li key={p.id} className={p.total === 0 ? 'cero' : ''}>
           <span className="nm"><span className="dot" style={{ background: p.color }} />{p.nombre}</span>

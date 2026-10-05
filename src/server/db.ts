@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Coleccion, Datos, PagoMarcado, Persona, Rol, TokenApi, Usuario } from '../shared/tipos.ts';
+import type { Coleccion, Datos, PagoMarcado, Persona, Rol, Tema, TokenApi, Usuario } from '../shared/tipos.ts';
 import { CLAVE_FALSA, claveCorrecta, hashClave, hashToken, nuevoToken, nuevoTokenApi } from './auth.ts';
 import { MIGRACIONES } from './migraciones.ts';
 
@@ -312,6 +312,19 @@ export function abrirAlmacen(ruta: string) {
         if (db.prepare('SELECT 1 FROM usuarios WHERE hogar = ?').get(id)) throw new ErrorPeticion('Otros usuarios comparten el hogar de esta cuenta');
       }
       db.prepare('UPDATE usuarios SET hogar = ? WHERE id = ?').run(hogar, id);
+    },
+
+    temaDe(id: string): Tema | null {
+      const fila = db.prepare('SELECT tema FROM usuarios WHERE id = ?').get(id) as { tema: string | null } | undefined;
+      return fila?.tema ? (JSON.parse(fila.tema) as Tema) : null;
+    },
+
+    guardarTema(id: string, tema: unknown): Tema {
+      const { paleta, modo } = (tema ?? {}) as Record<string, unknown>;
+      if (typeof paleta !== 'string' || !/^[a-z]{1,20}$/.test(paleta)) throw new ErrorPeticion('Campo inválido: paleta');
+      if (modo !== 'auto' && modo !== 'light' && modo !== 'dark') throw new ErrorPeticion('Campo inválido: modo');
+      db.prepare('UPDATE usuarios SET tema = ? WHERE id = ?').run(JSON.stringify({ paleta, modo }), id);
+      return { paleta, modo };
     },
 
     /** Crea la cuenta y le carga sus datos iniciales. */

@@ -208,6 +208,17 @@ describe('usuarios y segregación', () => {
     expect(Object.keys(almacen.listarUsuarios()[0]).sort()).toEqual(['hogar', 'id', 'nombre', 'rol']);
   });
 
+  it('cada usuario guarda su tema', () => {
+    const { almacen, admin } = conAdmin();
+    const ana = almacen.crearUsuario('Ana', 'secreto-largo', 'usuario', SEMILLA_BASE);
+    expect(almacen.temaDe(admin.id)).toBeNull();
+    almacen.guardarTema(admin.id, { paleta: 'oceano', modo: 'dark', otro: 1 });
+    expect(almacen.temaDe(admin.id)).toEqual({ paleta: 'oceano', modo: 'dark' });
+    expect(almacen.temaDe(ana.id)).toBeNull();
+    expect(() => almacen.guardarTema(admin.id, { paleta: 'Océano!', modo: 'dark' })).toThrow();
+    expect(() => almacen.guardarTema(admin.id, { paleta: 'oceano', modo: 'sepia' })).toThrow();
+  });
+
   it('las sesiones se cierran al salir y al cambiar la contraseña', () => {
     const { almacen, admin } = conAdmin();
     const t1 = almacen.crearSesion(admin.id);

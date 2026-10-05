@@ -188,11 +188,13 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
         </section>
       )}
 
+      <div className={deEsteMes.length + apartados.length > 0 ? 'grid two' : 'grid'}>
       <section className="panel">
         <h2>Pagos fijos de cada mes</h2>
         {fijos.map(filaGasto)}
         <div className="psub"><span>Subtotal</span><b className="amt">{fmt(fijos.reduce((s, g) => s + monto(g), 0))}</b></div>
       </section>
+      <div className="stack">
 
       {deEsteMes.length > 0 && (
         <section className="panel">
@@ -211,6 +213,8 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
           <div className="psub"><span>Subtotal</span><b className="amt">{fmt(apartados.reduce((s, g) => s + monto(g), 0))}</b></div>
         </section>
       )}
+      </div>
+      </div>
     </>
   );
 }

@@ -115,8 +115,15 @@ export interface Usuario {
   hogar?: string | null; // id del usuario cuyos datos comparte; vacío = los suyos
 }
 
+/** Apariencia que eligió el usuario; se guarda en su cuenta y lo sigue a cualquier dispositivo. */
+export interface Tema {
+  paleta: string; // "power" es la original
+  modo: 'auto' | 'light' | 'dark';
+}
+
 export interface Sesion {
   usuario: Usuario | null;
+  tema?: Tema | null; // null = aún no elige
   requiereConfiguracion: boolean; // aún no existe ningún usuario
 }
 

@@ -8,6 +8,7 @@ Dashboard de presupuesto familiar (México, MXN): cuánto entra, cuánto se paga
 - **Liquidez por mes:** una gráfica con lo que queda libre cada mes. Al tocar un mes se despliega su detalle: ingresos, gastos fijos, meses sin intereses y liquidez.
 - **Pagos:** la lista de lo que hay que pagar en el mes, para irlo marcando, y el avance de las compras a meses sin intereses.
 - **Gastos de ciertos meses:** al capturar un gasto puedes marcar «Solo se paga en ciertos meses» y elegir cuáles, entre los próximos 12: uno solo para un gasto único, o varios aunque no sean seguidos. El monto cuenta completo en cada mes elegido y nada en los demás. En Pagos sale aparte el mes que toca, y deja de listarse cuando ya pasó su último mes.
+- **Temas:** en el menú del usuario → Configuración se elige el tema de la interfaz: Power (el original) o Skeumorphism, Vintage, Dark y Forest, tomados de los design skills de typeUI. El botón de sol/luna de la barra cambia entre claro y oscuro en los temas que tienen los dos modos (Vintage solo es claro y Dark solo oscuro). Se guarda en la cuenta de cada usuario, así que lo sigue a cualquier dispositivo y no cambia el de los demás.
 - **Escenarios:** un gasto marcado como «recortable» se puede quitar de las cuentas sin borrarlo, para ver cómo cambia el sobrante.
 - **Reparto del hogar:** cuando dos o más personas comparten el hogar (ver «Usuarios»), cada ingreso dice de quién es y cada gasto o compra a MSI quién lo paga. Por defecto va en partes iguales; se puede poner «solo» una persona, o que una ponga un porcentaje o una cantidad y el resto los demás. El Resumen muestra por persona lo que gana, lo que le toca aportar y lo que le queda.
 - **Split:** un gasto que se comparte con gente de fuera del hogar (por ejemplo, una renta entre tres) se captura por el total, diciendo entre cuántas personas se divide y qué parte toca: partes iguales, una cantidad o un porcentaje. En las cuentas solo entra esa parte.
@@ -50,7 +51,7 @@ Para construir la imagen en el propio servidor en lugar de bajarla: `docker comp
 ## Usuarios
 
 - **Primera vez:** al abrir la app recién instalada pide crear la cuenta de **administrador**. Hazlo en cuanto la despliegues: quien llegue primero se queda con esa cuenta.
-- **Más usuarios:** el administrador los crea en la pestaña **Cuenta** (no hay límite). 
+- **Más usuarios:** el administrador los crea en el menú del usuario → **Cuenta** (no hay límite). 
 - **Cuentas limpias:** toda cuenta, incluida la del administrador, empieza sin datos: solo trae las categorías. Para cargar datos existentes usa **Datos → Respaldo → Importar JSON**.
 - **Categorías:** hay categorías de gasto y de ingreso (Sueldo, Bono, Aguinaldo…). Se crean al capturar, con «+ Nueva categoría…», o en **Datos → Categorías**, donde también se renombran y se borran las que no están en uso.
 - **Información separada:** cada usuario solo ve y modifica lo suyo, salvo que comparta el hogar del administrador (siguiente punto). El administrador crea cuentas, restablece contraseñas y borra usuarios (con toda su información), pero no ve los datos de quienes no comparten su hogar.
@@ -62,7 +63,7 @@ Para construir la imagen en el propio servidor en lugar de bajarla: `docker comp
 
 La app incluye un servidor **MCP** de solo lectura en `/mcp`, para que un asistente consulte los datos de un usuario (o los de su hogar, si lo comparte).
 
-1. En la pestaña **Cuenta → Acceso para asistentes**, crea un token. Se muestra una sola vez.
+1. En el menú del usuario → **Cuenta → Acceso para asistentes**, crea un token. Se muestra una sola vez.
 2. Conecta el asistente a `http://TU-SERVIDOR:8080/mcp` mandando el token en la cabecera `Authorization: Bearer fin_…`. Con Claude Code:
 
    ```sh

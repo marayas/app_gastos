@@ -49,6 +49,160 @@
   --c9:#EB6834; --c10:#0E8F8A; --c11:#7C5A3C;
 }
 
+/*
+ * Temas alternativos (menú del usuario → Configuración), tomados de los design skills de typeUI
+ * (typeui.sh/design-skills, repo bergside/awesome-design-skills). typeUI define un solo modo por tema: Vintage y
+ * Skeumorphism claros; Dark y Forest oscuros. El modo contrario de Skeumorphism y Forest es una derivación propia
+ * para el botón de claro/oscuro; Vintage y Dark no la tienen. Los colores de categoría son los de arriba.
+ * Vintage y Skeumorphism tienen DESIGN.md en el repo; de Dark y Forest solo hay imagen de ejemplo,
+ * así que sus colores están muestreados de ella y la tipografía es la más parecida.
+ */
+/*
+ * Vintage (typeui.sh/design-skills/vintage): escritorio de Windows 98. Fondo verde azulado #008080, ventanas
+ * gris plata #C0C0C0 con bisel, barras de título azul marino y letra pixel Silkscreen. Solo tiene versión clara.
+ */
+:root[data-paleta="vintage"]{
+  --bg:#008080; --raised:#C0C0C0; --control:#C0C0C0; --sunken:#FFFFFF;
+  --border:#808080; --border-strong:#404040;
+  --heading:#000000; --body:#000000; --subtle:#404040;
+  --brand:#000080; --brand-strong:#000080; --brand-soft:#808080; --brand-softer:#DFDFDF; --on-brand:#FFFFFF; --brand-text:#000080;
+  --ok-fg:#006400; --ok-bg:#DFDFDF; --ok-bd:#808080;
+  --bad-fg:#B00000; --bad-bg:#DFDFDF; --bad-bd:#808080;
+  --in:#008000; --out:#800000; --neg:#FF0000;
+  --mono:'Silkscreen','Courier New',Courier,monospace;
+  --alto:#FFFFFF #000000 #000000 #FFFFFF; --alto-2:inset 1px 1px 0 #DFDFDF,inset -1px -1px 0 #808080;
+  --hundido:#808080 #FFFFFF #FFFFFF #808080; --hundido-2:inset 1px 1px 0 #000000,inset -1px -1px 0 #DFDFDF;
+  --pad:24px;
+}
+:root[data-paleta="vintage"] *,:root[data-paleta="vintage"] *::before,:root[data-paleta="vintage"] *::after{border-radius:0!important}
+:root[data-paleta="vintage"] body{font-size:14px}
+:root[data-paleta="vintage"] :is(h1,h2,.hero-num,.kpi .num,.hero-stats b,.ring b,dialog h2){letter-spacing:0}
+:root[data-paleta="vintage"] .hero-num{font-size:clamp(36px,7vw,60px);line-height:1.1}
+:root[data-paleta="vintage"] :is(.hero-num,.kpi .num,.amt,.hero-stats b,.ring b,td.r,.mesdet dd,.persona dd,.note b,.hero-sub b,.vsbar b){font-weight:400}
+:root[data-paleta="vintage"] :is(.pagehead h1,.acceso h1,.acceso > .sub,.acceso > .brand,main > .sub){color:#FFFFFF}
+:root[data-paleta="vintage"] :is(.pagehead h1,.acceso h1){text-shadow:2px 2px 0 #000000}
+:root[data-paleta="vintage"] .pagehead .eyebrow{color:#FFFF00}
+:root[data-paleta="vintage"] :is(.hero,.kpi,.panel,dialog,.menu,.persona,.mesdet,.tema,.topbar,.seg,.ghost,.add,.primary,.chip,.iconbtn,.nav button:hover,.menu button:hover,.icon:hover){
+  background:var(--raised);border-color:var(--alto);box-shadow:var(--alto-2)}
+:root[data-paleta="vintage"] .topbar{border:0;border-bottom:1px solid #000000;box-shadow:inset 0 1px 0 #FFFFFF,inset 0 -1px 0 #808080}
+:root[data-paleta="vintage"] :is(.add,.primary,.ghost,.chip,.iconbtn){color:#000000}
+:root[data-paleta="vintage"] :is(.add,.primary){font-weight:700;box-shadow:var(--alto-2),0 0 0 1px #000000}
+:root[data-paleta="vintage"] .ghost.danger{color:var(--bad-fg)}
+:root[data-paleta="vintage"] :is(.add,.primary,.ghost,.chip,.iconbtn,.tema):active,
+:root[data-paleta="vintage"] :is(.nav button[aria-selected="true"],.menu button[aria-current="page"],.tema[aria-checked="true"],button.chip[aria-expanded="true"]){
+  background:#DFDFDF;color:#000000;border-color:var(--hundido);box-shadow:var(--hundido-2)}
+:root[data-paleta="vintage"] .tema[aria-checked="true"] .pn{font-weight:700}
+:root[data-paleta="vintage"] .seg button[aria-pressed="true"]{background:#000080;color:#FFFFFF}
+:root[data-paleta="vintage"] :is(input,select,.meter,.track,.ibox,.logo,.calc,.note.warn,.secret code){border:1px solid;border-color:var(--hundido);box-shadow:var(--hundido-2)}
+:root[data-paleta="vintage"] :is(input,select){background:#FFFFFF;color:#000000}
+:root[data-paleta="vintage"] :is(.calc,.note.warn,.secret){background:#FFFFE1;color:#000000}
+:root[data-paleta="vintage"] :is(.ibox,.logo){background:#FFFFFF}
+:root[data-paleta="vintage"] input[type=checkbox]:checked{background:#FFFFFF;border-color:var(--hundido)}
+:root[data-paleta="vintage"] input[type=checkbox]:checked::after{border-color:#000000}
+:root[data-paleta="vintage"] .flag{background:#FFFFE1;border-color:#000000;color:#000000}
+:root[data-paleta="vintage"] .meter i{background:repeating-linear-gradient(90deg,#000080 0 10px,transparent 10px 12px)}
+:root[data-paleta="vintage"] .col i{background:#000080}
+:root[data-paleta="vintage"] .spark.big .col i{background:#008000}
+:root[data-paleta="vintage"] :is(.col:hover i,.col[aria-pressed="true"] i){background:#1084D0}
+:root[data-paleta="vintage"] tbody tr:not(.catrow):hover td{background:#DFDFDF}
+:root[data-paleta="vintage"] .dias{border:2px groove #FFFFFF}
+:root[data-paleta="vintage"] :is(button,select,a.ghost):focus-visible{outline:1px dotted #000000;outline-offset:-5px}
+:root[data-paleta="vintage"] dialog::backdrop{background:rgb(0 64 64 / .6);-webkit-backdrop-filter:none;backdrop-filter:none}
+/* Barra de título de ventana en cada panel y en los diálogos. */
+:root[data-paleta="vintage"] :is(.panel > h2:first-child,.panel > .rowbtn:first-child,dialog h2){
+  margin:calc(3px - var(--pad)) calc(3px - var(--pad)) 16px;padding:4px 8px;background:linear-gradient(90deg,#000080,#1084D0);color:#FFFFFF;font-size:14px;font-weight:700;text-transform:none}
+:root[data-paleta="vintage"] .panel > .rowbtn:first-child h2{color:#FFFFFF;font-size:14px}
+:root[data-paleta="vintage"] .panel > .rowbtn:first-child .ghost{padding:2px 12px;min-height:0}
+:root[data-paleta="vintage"] dialog h2{margin-bottom:0}
+@media (max-width:759px){
+  :root[data-paleta="vintage"]{--pad:16px}
+  :root[data-paleta="vintage"] dialog{--pad:24px}
+  :root[data-paleta="vintage"] .nav{background:var(--raised);border:1px solid;border-color:var(--alto);box-shadow:var(--alto-2),4px 4px 0 rgb(0 0 0 / .4)}
+}
+
+/*
+ * Skeumorphism (typeui.sh/design-skills/skeumorphism): superficies crema con relieve, botón naranja con brillo
+ * (#F08321 → #FA3C00 del skill, degradado de la vista previa), Germania One en títulos y Roboto en el texto.
+ */
+:root[data-paleta="skeuo"]{
+  --bg:#F5EDE0; --raised:#EDE5D5; --control:#F0E8DB; --sunken:#E3D9C6;
+  --border:#DCC39E; --border-strong:#C4A271;
+  --heading:#3A2E1F; --body:#5E5241; --subtle:#857660;
+  --brand:#E17712; --brand-strong:#B95A05; --brand-soft:#F0CFA3; --brand-softer:#FFF3E0; --on-brand:#FFFFFF; --brand-text:#A84E05;
+  --in:#1F8F5F; --out:#E17712;
+  --mono:'Roboto','Helvetica Neue',Arial,sans-serif;
+  --luz:.85; --sombra:.2;
+  --relieve:inset 0 1px 0 rgb(255 255 255 / var(--luz)),0 1px 2px rgb(74 48 12 / var(--sombra));
+  --brillo:linear-gradient(rgb(255 255 255 / .5),rgb(255 255 255 / 0) 56px);
+}
+:root[data-paleta="skeuo"] :is(h1,.hero-num,.kpi .num,dialog h2,.hero-stats b,.ring b){font-family:'Germania One','Roboto',sans-serif;font-weight:400;letter-spacing:0;text-transform:none;text-shadow:0 1px 0 rgb(255 255 255 / var(--luz))}
+:root[data-paleta="skeuo"] :is(.hero,.kpi,.panel,dialog,.menu,.persona,.mesdet,.tema){border-radius:12px;background:var(--brillo),var(--raised);
+  box-shadow:inset 0 1px 0 rgb(255 255 255 / var(--luz)),0 2px 4px rgb(74 48 12 / var(--sombra)),0 16px 24px -16px rgb(74 48 12 / .35)}
+:root[data-paleta="skeuo"] .topbar{box-shadow:inset 0 1px 0 rgb(255 255 255 / var(--luz)),0 2px 6px rgb(74 48 12 / .25)}
+:root[data-paleta="skeuo"] .nav button{color:var(--brand-text)}
+:root[data-paleta="skeuo"] :is(.ghost:not(.danger),.chip,.iconbtn,.seg,.icon:hover){background:linear-gradient(var(--control),var(--raised));box-shadow:var(--relieve)}
+:root[data-paleta="skeuo"] :is(.add,.primary,.seg button[aria-pressed="true"],input[type=checkbox]:checked){color:#FFFFFF;border-color:#8A4303;
+  background:linear-gradient(#F1AB5A,#E17712 48%,#B95A05);box-shadow:inset 0 1px 0 rgb(255 255 255 / .55),0 2px 4px rgb(74 48 12 / .45)}
+:root[data-paleta="skeuo"] :is(.add,.primary,.seg button[aria-pressed="true"]){text-shadow:0 -1px 0 rgb(90 40 0 / .45)}
+:root[data-paleta="skeuo"] :is(.add,.primary):hover{filter:brightness(1.06)}
+:root[data-paleta="skeuo"] :is(.add,.primary,.ghost,.chip,.iconbtn):active{box-shadow:inset 0 2px 5px rgb(74 48 12 / .5)}
+:root[data-paleta="skeuo"] :is(input,select,.meter,.track,.nav button[aria-selected="true"],.menu button[aria-current="page"]){box-shadow:inset 0 2px 4px rgb(74 48 12 / var(--sombra)),0 1px 0 rgb(255 255 255 / var(--luz))}
+:root[data-paleta="skeuo"] :is(.meter i,.track i:not(.free)){background-image:linear-gradient(rgb(255 255 255 / .4),rgb(255 255 255 / 0) 60%)!important}
+:root[data-paleta="skeuo"] .col i{box-shadow:inset 0 1px 0 rgb(255 255 255 / .45),inset 1px 0 0 rgb(255 255 255 / .2),0 1px 2px rgb(74 48 12 / .4)}
+:root[data-paleta="skeuo"] :is(.logo,.ibox){box-shadow:var(--relieve)}
+:root[data-paleta="skeuo"] .ibox{border-radius:10px}
+:root[data-paleta="skeuo"] .muestra{border-radius:6px}
+:root[data-paleta="skeuo"][data-theme="dark"]{
+  --bg:#2B241B; --raised:#3A3126; --control:#463B2D; --sunken:#1F1A13;
+  --border:#5A4A35; --border-strong:#7D6848;
+  --heading:#F5EDE0; --body:#D6CAB6; --subtle:#A69783;
+  --brand:#E17712; --brand-strong:#F08321; --brand-soft:#6B3A0A; --brand-softer:#45270A; --brand-text:#F3B273;
+  --in:#34D399;
+  --luz:.1; --sombra:.5;
+  --brillo:linear-gradient(rgb(255 255 255 / .07),rgb(255 255 255 / 0) 56px);
+}
+
+/* Dark (typeui.sh/design-skills/dark, vista previa «Nocturn»): negro berenjena, acento malva, títulos con serifa. */
+:root[data-paleta="dark"]{
+  --bg:#13111C; --raised:#1A1723; --control:#26222F; --sunken:#0D0B14;
+  --border:#2D2B35; --border-strong:#474352;
+  --heading:#F7F5FA; --body:#C8C4D0; --subtle:#918B9D;
+  --brand:#5A4C63; --brand-strong:#8A7596; --brand-soft:#42344B; --brand-softer:#221B27; --on-brand:#FFFFFF; --brand-text:#D3C4DC;
+  --mono:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+:root[data-paleta="dark"] body{background:radial-gradient(70% 480px at 50% 0,#1D1928,transparent) no-repeat,var(--bg)}
+:root[data-paleta="dark"] :is(h1,.hero-num,.kpi .num,dialog h2,.hero-stats b,.ring b){font-family:'Source Serif 4',Georgia,'Times New Roman',serif;letter-spacing:-.01em;text-transform:none}
+:root[data-paleta="dark"] :is(.hero,.kpi,.panel,dialog,.menu,.persona,.mesdet,.tema){border-radius:10px}
+:root[data-paleta="dark"] .ibox{border-radius:8px}
+:root[data-paleta="dark"] :is(.add,.primary){background:linear-gradient(#5E5068,#45384E);border-color:#6A5A74}
+:root[data-paleta="dark"] :is(.add,.primary):hover{background:linear-gradient(#6C5D77,#52445C)}
+:root[data-paleta="dark"] .seg button[aria-pressed="true"]{background:var(--brand);color:#FFFFFF}
+
+/* Forest (typeui.sh/design-skills/forest, vista previa «Canopy»): verde bosque, acento lima, formas muy redondeadas. */
+:root[data-paleta="forest"]{
+  --bg:#192A03; --raised:#2A4504; --control:#345401; --sunken:#132100;
+  --border:rgb(161 218 2 / .18); --border-strong:rgb(161 218 2 / .4);
+  --heading:#F4FAE8; --body:#D3E0BC; --subtle:#A4B788;
+  --brand:#A1DA02; --brand-strong:#B9EE1F; --brand-soft:#5A7923; --brand-softer:#3F6400; --on-brand:#192A03; --brand-text:#C5F04A;
+  --ok-fg:#B9EE1F; --ok-bg:#2A4504; --ok-bd:#5A7923;
+  --in:#A1DA02; --out:#F5A524; --neg:#FF8A7A;
+  --mono:'Noto Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+:root[data-paleta="forest"][data-theme="light"]{
+  --bg:#F3F8E8; --raised:#FFFFFF; --control:#F7FBEF; --sunken:#E3EDCD;
+  --border:rgb(42 69 4 / .18); --border-strong:rgb(42 69 4 / .42);
+  --heading:#192A03; --body:#3A4F1C; --subtle:#667A45;
+  --brand:#8BC400; --brand-strong:#739E00; --brand-soft:#D2E99A; --brand-softer:#EEF7D6; --on-brand:#192A03; --brand-text:#3F6400;
+  --ok-fg:#3F6400; --ok-bg:#EEF7D6; --ok-bd:#D2E99A;
+  --in:#5E9E00; --out:#D97706; --neg:#C70036;
+}
+:root[data-paleta="forest"] :is(h1,.hero-num,dialog h2){letter-spacing:-.02em;text-transform:none}
+:root[data-paleta="forest"] :is(.hero,.kpi,.panel,dialog,.menu){border-radius:20px}
+:root[data-paleta="forest"] :is(.persona,.mesdet,.tema,.ibox,.calc,.note.warn,.secret){border-radius:12px}
+:root[data-paleta="forest"] :is(input,select){border-radius:12px}
+:root[data-paleta="forest"] .topbar{background:var(--sunken)}
+:root[data-paleta="forest"] .seg button[aria-pressed="true"]{background:var(--brand);color:var(--on-brand)}
+
 /* ---------- Base ---------- */
 *,*:before,*:after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--body);font-family:var(--mono);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -79,11 +233,27 @@ h3{font-size:12px;font-weight:500;color:var(--subtle);margin:24px 0 0;text-trans
 .nav button{display:flex;gap:8px;align-items:center;min-height:44px;padding:8px 16px;border-radius:999px;border:1px solid transparent;background:none;color:var(--body);font-size:14px;font-weight:500;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
 .nav button:hover{background:var(--control);border-color:var(--border);color:var(--heading)}
 .nav button[aria-selected="true"]{background:var(--brand-softer);border-color:var(--brand-strong);color:var(--brand-text)}
-.user{display:flex;gap:8px;align-items:center}
+.user{display:flex;gap:8px;align-items:center;position:relative}
+button.chip{display:flex;gap:8px;align-items:center;min-height:44px;transition:border-color .15s}
+button.chip > span{overflow:hidden;text-overflow:ellipsis}
+button.chip:hover,button.chip[aria-expanded="true"]{border-color:var(--brand-strong)}
+.menu{position:absolute;z-index:40;top:calc(100% + 8px);right:0;min-width:208px;display:grid;gap:4px;padding:8px;background:var(--raised);border:1px solid var(--border-strong);box-shadow:0 16px 40px -8px rgb(0 0 0 / .5)}
+.menu button{display:flex;gap:12px;align-items:center;min-height:44px;padding:8px 12px;border:1px solid transparent;border-radius:999px;background:none;color:var(--body);font-size:14px;font-weight:500;text-align:left}
+.menu button:hover{background:var(--control);border-color:var(--border);color:var(--heading)}
+.menu button[aria-current="page"]{background:var(--brand-softer);border-color:var(--brand-strong);color:var(--brand-text)}
+.temas{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:16px}
+.tema{display:flex;gap:12px;align-items:center;padding:12px;background:var(--control);border:1px solid var(--border);color:var(--heading);font-size:14px;text-align:left;transition:border-color .15s}
+.tema:hover{border-color:var(--border-strong)}
+.tema[aria-checked="true"]{border-color:var(--brand-strong);box-shadow:inset 0 0 0 1px var(--brand-strong)}
+.tema .pn small{display:block;color:var(--subtle);font-size:12px}
+.muestra{flex:none;width:56px;height:40px;display:flex;gap:4px;align-items:flex-end;padding:6px;border:1px solid var(--border-strong)}
+.muestra i{flex:1;height:100%}
+.muestra i + i{height:50%;border-radius:999px}
 .chip{font-size:14px;font-weight:500;color:var(--heading);padding:10px 16px;border-radius:999px;background:var(--control);border:1px solid var(--border);max-width:136px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .iconbtn{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--control);color:var(--heading);display:grid;place-items:center;padding:0;transition:border-color .15s,color .15s}
 .iconbtn:hover{border-color:var(--brand-strong);color:var(--brand)}
-main{max-width:1120px;margin:0 auto;padding:32px 24px 64px;overflow-x:clip}
+.iconbtn:disabled{opacity:.45;cursor:not-allowed}
+main{max-width:1600px;margin:0 auto;padding:32px 24px 64px;overflow-x:clip}
 .pagehead{margin:0 0 24px;display:grid;gap:8px}
 .grid{display:grid;gap:24px;margin-bottom:24px;align-items:start}
 .stack{display:grid;gap:24px;min-width:0}
@@ -293,6 +463,13 @@ main > :nth-child(n+5){animation-delay:.16s}
   .hero.pay{grid-template-columns:auto 1fr}
   .ring{width:152px;height:152px}
   .grid.two{grid-template-columns:1fr 1fr}
+}
+/* Pantalla ancha: la lista de egresos va en dos columnas para que su panel mida lo que la columna de al lado. */
+@media (min-width:1100px){
+  .grid.two.sesgo{grid-template-columns:minmax(0,2fr) minmax(0,3fr)}
+  .rank.cols{display:block;columns:2;column-gap:40px}
+  .rank.cols li{break-inside:avoid;margin-bottom:16px}
+  .rank.cols li.resto{column-span:all;margin-bottom:0}
 }
 @media (max-width:759px){
   .topbar{padding-left:16px;padding-right:16px}

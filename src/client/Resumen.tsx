@@ -142,7 +142,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
         </section>
       )}
 
-      <div className="grid two">
+      <div className="grid two sesgo">
         <div className="stack">
           <section className="panel">
             <h2>De dónde viene</h2>
@@ -179,7 +179,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
         <section className="panel">
           <h2>A dónde se va</h2>
           <Ranking
-            partes={partes} base={base} tono="out"
+            partes={partes} base={base} tono="out" columnas
             sobrante={{ nombre: `Sobrante ${anual ? 'al año' : 'al mes'}`, total: r.sobrante }}
           />
         </section>

@@ -98,4 +98,8 @@ export const MIGRACIONES: string[] = [
   `
   ALTER TABLE gastos ADD COLUMN meses TEXT;
   `,
+  // 7: tema de la interfaz que eligió cada usuario (JSON; vacío = el de siempre).
+  `
+  ALTER TABLE usuarios ADD COLUMN tema TEXT;
+  `,
 ];
