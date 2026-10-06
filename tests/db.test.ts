@@ -51,6 +51,12 @@ describe('datos de un usuario', () => {
     const { id } = a.crear('gastos', { nombre: 'Agua', categoria: 'casa', monto: 900, frecuencia: 'trimestre', clase: 'basico' });
     expect(a.leerDatos().gastos.find((x) => x.id === id)).toMatchObject({ frecuencia: 'trimestre', clase: 'basico' });
     expect(() => a.crear('gastos', { nombre: 'X', categoria: 'casa', monto: 1, frecuencia: 'mes', clase: 'capricho' })).toThrow();
+    // «deuda» ya no es una clase: lo que venga así de un respaldo anterior se guarda como marca.
+    const vieja = a.crear('gastos', { nombre: 'Auto', categoria: 'auto', monto: 5000, frecuencia: 'mes', clase: 'deuda' });
+    expect(a.leerDatos().gastos.find((x) => x.id === vieja.id)).toMatchObject({ deuda: true });
+    expect(a.leerDatos().gastos.find((x) => x.id === vieja.id)?.clase).toBeUndefined();
+    const msi = a.crear('msi', { nombre: 'Lavadora', pagoMensual: 900, plazoTotal: 12, inicio: '2026-10', clase: 'basico' });
+    expect(a.leerDatos().msi.find((x) => x.id === msi.id)?.clase).toBe('basico');
     expect(() => a.crear('gastos', { nombre: 'X', categoria: 'casa', monto: 1, frecuencia: 'semestre' })).toThrow();
   });
 

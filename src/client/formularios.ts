@@ -41,14 +41,12 @@ export const CLASES: [string, string][] = [
   ['basico', 'Básico'],
   ['lujo', 'Lujo'],
   ['ahorro', 'Ahorro'],
-  ['deuda', 'Deuda'],
 ];
 
 const CLASES_LARGAS: [string, string][] = [
   ['basico', 'Básico: lo necesitas sí o sí'],
   ['lujo', 'Lujo: podrías vivir sin él'],
   ['ahorro', 'Ahorro o inversión'],
-  ['deuda', 'Deuda o crédito'],
 ];
 
 /** En el formulario de gasto: no se le pone clase propia y toma la de su categoría. */
@@ -234,6 +232,10 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           k: 'restantes', etiqueta: 'Pagos restantes', tipo: 'entero', maxDe: 'plazoTotal',
           ayuda: 'Como aparece en tu tarjeta, contando el pago de este mes. Después baja solo, uno cada mes.',
         },
+        {
+          k: 'clase', etiqueta: 'Lo que compraste es', tipo: 'select', opciones: CLASES_LARGAS.filter(([k]) => k !== 'ahorro'),
+          ayuda: 'Para la regla 50/20/30: la mensualidad cuenta en ese grupo y, además, como deuda.',
+        },
         ...camposReparto(hogar, '¿Quién la paga?'),
       ];
       const compra = origen as CompraMSI | null;
@@ -259,7 +261,7 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
               : ` · con esta compra tus deudas quedan en ${Math.round(deuda)}% de tu ingreso fijo (tope ${TOPE_DEUDA}%)`)
           );
         },
-        aForm: (item) => aForm(campos, { ...(item && { ...item, restantes: restantesAhora }), ...repartoAForm(compra?.reparto, hogar) }),
+        aForm: (item) => aForm(campos, { clase: 'lujo', ...(item && { ...item, restantes: restantesAhora }), ...repartoAForm(compra?.reparto, hogar) }),
         deForm(v, id) {
           const { restantes, ...c } = conReparto(deForm(campos, v, id), v, origen);
           // Sin cambios en plazo ni restantes se conserva el inicio (importa en compras que aún no empiezan).
@@ -356,6 +358,7 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           opciones: [[DE_CATEGORIA, 'El de su categoría'], ...CLASES_LARGAS],
           ayuda: 'Para la regla 50/20/30 del Resumen. Cada categoría tiene su tipo (se cambia en Datos); aquí puedes ponerle otro solo a este gasto.',
         },
+        { k: 'deuda', etiqueta: 'Es el pago de una deuda o crédito (cuenta para el tope de endeudamiento)', tipo: 'check' },
         { k: 'porMeses', etiqueta: 'Solo se paga en ciertos meses (no se repite cada mes)', tipo: 'check', si: () => !porDia },
         {
           k: 'meses', etiqueta: '¿En qué meses se paga?', tipo: 'meses', opciones: elegibles.map((m) => [m, mesCorto(m)]),

@@ -228,13 +228,19 @@ export function resumenPorPersona(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): 
   return miembros.map((persona, i) => ({ persona, ingresos: ingresos[i], egresos: egresos[i], sobrante: ingresos[i] - egresos[i] }));
 }
 
-/** Regla 50/20/30: parte del ingreso fijo para básicos, lujos y ahorro. Las deudas se miden aparte, con tope. */
-export const META: Record<Exclude<Clase, 'deuda'>, number> = { basico: 50, lujo: 20, ahorro: 30 };
+/**
+ * Regla 50/20/30: parte del ingreso fijo para básicos, lujos y ahorro; entre los tres suman todo lo que se gasta.
+ * El endeudamiento se mide encima: qué parte del ingreso son pagos de deuda, estén en el grupo que estén.
+ */
+export const META: Record<Clase, number> = { basico: 50, lujo: 20, ahorro: 30 };
 export const TOPE_DEUDA = 30;
 
 /** La clase que se le puso al gasto o, si no tiene, la de su categoría (básico si la categoría no dice). */
 export const claseDeGasto = (d: Pick<Datos, 'categorias'>, g: Pick<Gasto, 'clase' | 'categoria'>): Clase =>
   g.clase ?? d.categorias.find((c) => c.id === g.categoria)?.clase ?? 'basico';
+
+/** Lo que se compró a meses: básico o lujo (lujo si no se dijo). */
+export const claseDeMsi = (c: Pick<CompraMSI, 'clase'>): 'basico' | 'lujo' => c.clase ?? 'lujo';
 
 /** Ingreso con el que se vive mes a mes: sin los de una sola vez (bono, aguinaldo). */
 export const ingresoFijoDelMes = (d: Datos, mes: Mes): number =>
@@ -245,7 +251,7 @@ export interface Regla {
   basico: number;
   lujo: number;
   ahorro: number;
-  deuda: number; // gastos marcados como deuda + pagos de MSI
+  deuda: number; // gastos marcados como deuda + pagos de MSI; ya está contado dentro de los tres grupos
   margenDeuda: number; // cuánto más se puede pagar de deudas al mes sin pasar del tope; negativo si ya se pasó
 }
 
@@ -255,8 +261,16 @@ export function regla(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): Regla {
   const r = { ingresoFijo: 0, basico: 0, lujo: 0, ahorro: 0, deuda: 0 };
   for (const m of meses) {
     r.ingresoFijo += ingresoFijoDelMes(d, m);
-    r.deuda += msiDelMes(d, m);
-    for (const g of d.gastos) r[claseDeGasto(d, g)] += gastoDelMes(d, g, m);
+    for (const g of d.gastos) {
+      const monto = gastoDelMes(d, g, m);
+      r[claseDeGasto(d, g)] += monto;
+      if (g.deuda) r.deuda += monto;
+    }
+    for (const c of d.msi) {
+      if (!msiActiva(c, m)) continue;
+      r[claseDeMsi(c)] += c.pagoMensual;
+      r.deuda += c.pagoMensual;
+    }
   }
   return { ...r, margenDeuda: ((r.ingresoFijo * TOPE_DEUDA) / 100 - r.deuda) / meses.length };
 }

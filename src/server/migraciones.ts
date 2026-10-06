@@ -128,4 +128,14 @@ export const MIGRACIONES: string[] = [
   `
   ALTER TABLE inversiones ADD COLUMN desde TEXT;
   `,
+  // 12: «deuda» deja de ser una clase y pasa a ser una marca del gasto, para que básicos, lujos y ahorro sumen
+  // todo lo que se gasta. Las compras a MSI dicen si lo comprado es básico o lujo (vacío = lujo).
+  `
+  ALTER TABLE gastos ADD COLUMN deuda INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE compras_msi ADD COLUMN clase TEXT;
+  UPDATE gastos SET deuda = 1 WHERE clase = 'deuda' OR (clase IS NULL AND EXISTS (
+    SELECT 1 FROM categorias c WHERE c.usuario_id = gastos.usuario_id AND c.id = gastos.categoria AND c.clase = 'deuda'));
+  UPDATE gastos SET clase = NULL WHERE clase = 'deuda';
+  UPDATE categorias SET clase = 'basico' WHERE clase = 'deuda';
+  `,
 ];

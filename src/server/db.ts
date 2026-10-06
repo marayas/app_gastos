@@ -23,7 +23,7 @@ const COLECCIONES: Record<Coleccion, { tabla: string; campos: Record<string, Tip
   gastos: {
     tabla: 'gastos',
     campos: {
-      nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia', clase: 'clase?', meses: 'meses?',
+      nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia', clase: 'clase?', deuda: 'bool', meses: 'meses?',
       recortable: 'bool', nota: 'texto?', porDia: 'porDia?', split: 'split?', reparto: 'reparto?',
     },
   },
@@ -31,7 +31,7 @@ const COLECCIONES: Record<Coleccion, { tabla: string; campos: Record<string, Tip
     tabla: 'inversiones',
     campos: { nombre: 'texto', monto: 'numero', desde: 'mes?', tasa: 'numero', capitalizacion: 'capitalizacion', comoIngreso: 'bool', privadaDe: 'texto?', reparto: 'reparto?' },
   },
-  msi: { tabla: 'compras_msi', campos: { nombre: 'texto', pagoMensual: 'numero', plazoTotal: 'entero', inicio: 'mes', reparto: 'reparto?' } },
+  msi: { tabla: 'compras_msi', campos: { nombre: 'texto', pagoMensual: 'numero', plazoTotal: 'entero', inicio: 'mes', clase: 'clase?', reparto: 'reparto?' } },
   ciclos: { tabla: 'ciclos_escolares', campos: { nombre: 'texto', inicio: 'fecha', fin: 'fecha' } },
   sinClases: { tabla: 'sin_clases', campos: { desde: 'fecha', hasta: 'fecha', motivo: 'texto' } },
 };
@@ -78,7 +78,7 @@ function aCelda(tipo: Tipo, v: unknown, campo: string): Celda {
     case 'capitalizacion':
       return v === 'diaria' || v === 'mensual' || v === 'anual' ? v : falla();
     case 'clase?':
-      return v === 'basico' || v === 'lujo' || v === 'ahorro' || v === 'deuda' ? v : falla();
+      return v === 'basico' || v === 'lujo' || v === 'ahorro' ? v : falla();
     case 'tipoCategoria':
       return v === 'gasto' || v === 'ingreso' ? v : falla();
     case 'meses?': {
@@ -170,8 +170,12 @@ export function abrirAlmacen(ruta: string) {
       col === 'inversiones' ? [' AND (privada_de IS NULL OR privada_de = ?)', [visor]] : ['', []];
 
     /** Una inversión privada siempre es de quien la guarda; nadie la puede poner a nombre de otro. */
-    const normalizar = (col: Coleccion, obj: Record<string, unknown>) =>
-      col === 'inversiones' ? { ...obj, privadaDe: obj.privadaDe ? visor : undefined } : obj;
+    const normalizar = (col: Coleccion, obj: Record<string, unknown>) => {
+      if (col === 'inversiones') return { ...obj, privadaDe: obj.privadaDe ? visor : undefined };
+      // Respaldos de cuando «deuda» era una clase: ahora es una marca del gasto, y la categoría queda como básica.
+      if (obj.clase !== 'deuda') return obj;
+      return col === 'gastos' ? { ...obj, clase: undefined, deuda: true } : { ...obj, clase: col === 'categorias' ? 'basico' : undefined };
+    };
 
     const tipoDeCategoria = (id: unknown) =>
       typeof id === 'string'

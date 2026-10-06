@@ -1,6 +1,7 @@
 import {
   CATEGORIA_INVERSIONES,
   claseDeGasto,
+  claseDeMsi,
   FACTOR,
   finMSI,
   gastoDelMes,
@@ -34,7 +35,7 @@ import type { Datos, Mes } from '../shared/tipos.ts';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const MSI = 'Meses sin intereses';
-const CLASES = { basico: 'básico', lujo: 'lujo', ahorro: 'ahorro', deuda: 'deuda' };
+const CLASES = { basico: 'básico', lujo: 'lujo', ahorro: 'ahorro' };
 const FRECUENCIAS = { mes: 'mes', bimestre: 'bimestre', trimestre: 'trimestre', anio: 'año' };
 
 /** Regla 50/20/30 sobre el ingreso fijo, y nivel de endeudamiento contra su tope. */
@@ -49,7 +50,7 @@ function informeRegla(d: Datos, mes: Mes, periodo: 'mes' | 'anio') {
     deudas: {
       monto: r2(r.deuda), porcentaje: pct(r.deuda), topeMaximo: TOPE_DEUDA,
       margenParaOtraMensualidad: r2(r.margenDeuda),
-      nota: 'Incluye los pagos de MSI y los gastos marcados como deuda; no entran en básicos, lujos ni ahorro.',
+      nota: 'Pagos de MSI y gastos marcados como deuda. Ya están contados dentro de básicos, lujos o ahorro: es una medida aparte, no un cuarto grupo.',
     },
   };
 }
@@ -160,6 +161,7 @@ export function informeGastos(d: Datos, mes: Mes, categoria?: string) {
       monto: r2(g.porDia ? g.porDia.tarifa : g.monto),
       frecuencia: g.porDia ? 'por día de clases' : FRECUENCIAS[g.frecuencia],
       tipo: CLASES[claseDeGasto(d, g)],
+      esDeuda: g.deuda === true,
       costoEsteMes: r2(gastoDelMes(d, g, mes)),
       equivalenteMensual: g.porDia || g.meses ? null : r2(gastoDelMes(d, g, mes)),
       soloEnMeses: g.meses ?? null, // se paga completo solo en esos meses; null = todos los meses
@@ -186,6 +188,7 @@ export function informeMsi(d: Datos, mes: Mes) {
       const restantes = pagosRestantes(c, mes);
       return {
         compra: c.nombre,
+        tipo: CLASES[claseDeMsi(c)],
         pagoMensual: r2(c.pagoMensual),
         plazoTotal: c.plazoTotal,
         totalDeLaCompra: r2(c.pagoMensual * c.plazoTotal),

@@ -52,7 +52,7 @@ export function DatosTab({ real, mes, store, abrir }: Props) {
         <h2>Categorías</h2>
         <p className="note first">
           También puedes crear una categoría al capturar un ingreso o un gasto, con «+ Nueva categoría…». Solo se pueden borrar las que no están en uso.
-          Cada categoría de gasto dice si sus gastos son básicos, lujos, ahorro o deuda, para la regla 50/20/30 del Resumen.
+          Cada categoría de gasto dice si sus gastos son básicos, lujos o ahorro, para la regla 50/20/30 del Resumen.
         </p>
         {listaCategorias('ingreso', 'De ingresos')}
         {listaCategorias('gasto', 'De gastos')}

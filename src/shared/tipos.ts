@@ -4,10 +4,10 @@ export type Mes = string;
 export type Frecuencia = 'mes' | 'bimestre' | 'trimestre' | 'anio';
 
 /**
- * Para qué es un gasto, según la regla 50/20/30: lo que necesitas sí o sí, lo que podrías dejar,
- * lo que guardas, o el pago de una deuda (que se mide aparte, contra el tope de endeudamiento).
+ * Para qué es un gasto, según la regla 50/20/30: lo que necesitas sí o sí, lo que podrías dejar o lo que guardas.
+ * Que además sea una deuda es una marca aparte: la deuda se mide encima de estos grupos, no es otro grupo.
  */
-export type Clase = 'basico' | 'lujo' | 'ahorro' | 'deuda';
+export type Clase = 'basico' | 'lujo' | 'ahorro';
 
 export type TipoCategoria = 'gasto' | 'ingreso';
 
@@ -57,6 +57,7 @@ export interface Gasto {
   monto: number;
   frecuencia: Frecuencia;
   clase?: Clase; // vacío = la de su categoría
+  deuda?: boolean; // es el pago de un crédito: cuenta para el nivel de endeudamiento
   meses?: Mes[]; // solo se paga en esos meses, completo cada vez; vacío = todos los meses
   recortable?: boolean;
   nota?: string;
@@ -74,6 +75,7 @@ export interface CompraMSI {
   pagoMensual: number;
   plazoTotal: number;
   inicio: Mes; // mes del primer pago
+  clase?: 'basico' | 'lujo'; // lo que se compró; vacío = lujo. Toda compra a MSI es deuda
   reparto?: Reparto;
 }
 

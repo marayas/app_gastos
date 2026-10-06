@@ -141,28 +141,35 @@ describe('frecuencia trimestral', () => {
 });
 
 describe('regla 50/20/30 y endeudamiento', () => {
-  it('el gasto toma la clase de su categoría, y las deudas van aparte', () => {
+  it('básicos, lujos y ahorro suman todo lo que se gasta, MSI incluido', () => {
     const r = regla(d, '2026-10', 'mes');
     expect(r.ingresoFijo).toBe(75000);
-    expect(r.lujo).toBeCloseTo(2000 + 199.5, 2); // café (personal) y streaming (suscripciones)
+    expect(r.lujo).toBeCloseTo(2000 + 199.5 + 4500.5, 2); // café, streaming y las compras a MSI (lujo si no dicen otra cosa)
     expect(r.ahorro).toBe(10000);
-    expect(r.basico + r.lujo + r.ahorro).toBeCloseTo(FIJOS + 960, 2); // todos los gastos del mes
-    expect(r.deuda).toBe(4500.5); // solo MSI
-    expect(r.margenDeuda).toBeCloseTo(75000 * 0.3 - 4500.5, 2);
+    expect(r.basico + r.lujo + r.ahorro).toBeCloseTo(resumen(d, '2026-10', 'mes').egresos, 2);
+  });
+  it('la deuda se mide encima: MSI y gastos marcados, sin sacarlos de su grupo', () => {
+    const a = regla(d, '2026-10', 'mes');
+    expect(a.deuda).toBe(4500.5); // solo MSI
+    expect(a.margenDeuda).toBeCloseTo(75000 * 0.3 - 4500.5, 2);
+    const b = regla({ ...d, gastos: d.gastos.map((g) => (g.id === 'carro' ? { ...g, deuda: true } : g)) }, '2026-10', 'mes');
+    expect(b.deuda).toBe(4500.5 + 6000);
+    expect([b.basico, b.lujo, b.ahorro]).toEqual([a.basico, a.lujo, a.ahorro]); // el carro sigue en básicos
+  });
+  it('una compra a MSI marcada como básica pasa de lujos a básicos y sigue siendo deuda', () => {
+    const a = regla(d, '2026-10', 'mes');
+    const activa = d.msi.find((c) => c.inicio <= '2026-10')!;
+    const b = regla({ ...d, msi: d.msi.map((c) => (c === activa ? { ...c, clase: 'basico' as const } : c)) }, '2026-10', 'mes');
+    expect(b.basico - a.basico).toBeCloseTo(activa.pagoMensual, 2);
+    expect(a.lujo - b.lujo).toBeCloseTo(activa.pagoMensual, 2);
+    expect(b.deuda).toBe(a.deuda);
   });
   it('cambiar la clase de la categoría mueve sus gastos, salvo los que tienen la suya', () => {
-    const categorias = d.categorias.map((c) => (c.id === 'auto' ? { ...c, clase: 'deuda' as const } : c));
+    const categorias = d.categorias.map((c) => (c.id === 'auto' ? { ...c, clase: 'lujo' as const } : c));
     const gastos = d.gastos.map((g) => (g.id === 'seguro' ? { ...g, clase: 'basico' as const } : g));
-    expect(regla({ ...d, categorias, gastos }, '2026-10', 'mes').deuda).toBe(4500.5 + 6000); // el carro sí, el seguro no
-    expect(regla({ ...d, categorias: d.categorias.map(({ clase: _c, ...c }) => c) }, '2026-10', 'mes').lujo).toBe(0); // sin clase = básico
-  });
-  it('la clase puesta a mano manda, y una deuda sale de los básicos', () => {
-    const con = { ...d, gastos: d.gastos.map((g) => (g.id === 'carro' ? { ...g, clase: 'deuda' as const } : g.id === 'cafe' ? { ...g, clase: 'basico' as const } : g)) };
     const a = regla(d, '2026-10', 'mes');
-    const b = regla(con, '2026-10', 'mes');
-    expect(b.deuda).toBe(4500.5 + 6000);
-    expect(b.basico).toBeCloseTo(a.basico - 6000 + 2000, 2);
-    expect(b.lujo).toBeCloseTo(199.5, 2);
+    expect(regla({ ...d, categorias, gastos }, '2026-10', 'mes').lujo).toBeCloseTo(a.lujo + 6000, 2); // el carro sí, el seguro no
+    expect(regla({ ...d, categorias: d.categorias.map(({ clase: _c, ...c }) => c) }, '2026-10', 'mes').lujo).toBe(4500.5); // sin clase = básico; queda el MSI
   });
   it('el ingreso fijo no cuenta los ingresos de una sola vez', () => {
     const con = { ...d, ingresos: [...d.ingresos, { id: 'ag', nombre: 'Aguinaldo', monto: 30000, desde: '2026-12', hasta: '2026-12' }] };

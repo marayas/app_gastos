@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  CATEGORIA_INVERSIONES, claseDeGasto, diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, META, msiActiva, msiRestanteTotal, pagosRestantes,
+  CATEGORIA_INVERSIONES, claseDeGasto, claseDeMsi, diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, META, msiActiva, msiRestanteTotal, pagosRestantes,
   proyeccion, rangoMeses, regla, rendimientoMensual, resumen, resumenPorPersona, saldoInversion, tasaEfectivaAnual, TOPE_DEUDA, totalInversiones,
 } from '../shared/calc.ts';
 import type { Clase, Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
@@ -23,7 +23,7 @@ interface Props {
 
 export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abrir }: Props) {
   const [periodo, setPeriodo] = usePref<'mes' | 'anio'>('periodo', 'mes');
-  const [grupoAbierto, setGrupoAbierto] = useState<Clase | null>(null);
+  const [grupoAbierto, setGrupoAbierto] = useState<Clase | 'deuda' | null>(null);
   const anual = periodo === 'anio';
   const meses = anual ? rangoMeses(mes, 12) : [mes];
   const r = resumen(datos, mes, periodo);
@@ -67,25 +67,33 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
   const sinDuenio = real.ingresos.filter((x) => !x.reparto && meses.some((m) => ingresoVigente(x, m)));
   const rg = regla(datos, mes, periodo);
   const cuando = anual ? 'al año' : 'al mes';
-  // Básicos, lujos y deudas tienen un máximo; el ahorro, un mínimo.
+  // Básicos y lujos tienen un máximo; el ahorro, un mínimo. Entre los tres suman todo lo que se gasta.
   const grupos = [
-    { id: 'basico' as Clase, nombre: 'Básicos', total: rg.basico, meta: META.basico, minimo: false, que: 'Lo que necesitas sí o sí para vivir.' },
-    { id: 'lujo' as Clase, nombre: 'Lujos', total: rg.lujo, meta: META.lujo, minimo: false, que: 'Lo que podrías dejar sin que falte lo esencial.' },
-    { id: 'ahorro' as Clase, nombre: 'Ahorro', total: rg.ahorro, meta: META.ahorro, minimo: true, que: 'Lo que guardas o inviertes.' },
-    { id: 'deuda' as Clase, nombre: 'Deudas', total: rg.deuda, meta: TOPE_DEUDA, minimo: false, que: 'Meses sin intereses y créditos. Se miden aparte.' },
+    { id: 'basico' as const, nombre: 'Básicos', total: rg.basico, meta: META.basico, minimo: false, que: 'Lo que necesitas sí o sí para vivir.' },
+    { id: 'lujo' as const, nombre: 'Lujos', total: rg.lujo, meta: META.lujo, minimo: false, que: 'Lo que podrías dejar sin que falte lo esencial.' },
+    { id: 'ahorro' as const, nombre: 'Ahorro', total: rg.ahorro, meta: META.ahorro, minimo: true, que: 'Lo que guardas o inviertes.' },
   ];
-  // Lo que suma al grupo abierto, de mayor a menor: sus gastos y, en deudas, también las compras a MSI.
-  const abierto = grupos.find((g) => g.id === grupoAbierto);
+  // La deuda no es otro grupo: son los pagos de crédito que ya están dentro de esos tres.
+  const deudas = { id: 'deuda' as const, nombre: 'Pagos de deuda', total: rg.deuda };
+  const pctDeuda = rg.ingresoFijo ? (rg.deuda / rg.ingresoFijo) * 100 : 0;
+  const alternarGrupo = (id: Clase | 'deuda') => setGrupoAbierto(grupoAbierto === id ? null : id);
+  const alTeclear = (id: Clase | 'deuda') => (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    alternarGrupo(id);
+  };
+  // Lo que suma a lo abierto, de mayor a menor. Las compras a MSI entran en su grupo (básico o lujo) y siempre en deuda.
+  const abierto = grupoAbierto === 'deuda' ? deudas : grupos.find((g) => g.id === grupoAbierto);
   const incluidos = !abierto ? [] : [
-    ...datos.gastos.filter((g) => claseDeGasto(real, g) === abierto.id).map((g) => {
+    ...datos.gastos.filter((g) => (abierto.id === 'deuda' ? g.deuda : claseDeGasto(real, g) === abierto.id)).map((g) => {
       const cat = real.categorias.find((c) => c.id === g.categoria);
-      return { id: g.id, nombre: g.nombre, color: colorDe(cat), total: meses.reduce((s, m) => s + gastoDelMes(datos, g, m), 0), editar: () => abrir('gastos', g) };
+      return { id: g.id, nombre: g.nombre, color: colorDe(cat), deuda: !!g.deuda, total: meses.reduce((t, m) => t + gastoDelMes(datos, g, m), 0), editar: () => abrir('gastos', g) };
     }),
-    ...(abierto.id !== 'deuda' ? [] : datos.msi.map((c) => ({
-      id: c.id, nombre: c.nombre, color: COLOR_MSI,
-      total: meses.reduce((s, m) => s + (msiActiva(c, m) ? c.pagoMensual : 0), 0), editar: () => abrir('msi', c),
-    }))),
-  ].filter((x) => x.total > 0).sort((a, b) => b.total - a.total);
+    ...datos.msi.filter((c) => abierto.id === 'deuda' || claseDeMsi(c) === abierto.id).map((c) => ({
+      id: c.id, nombre: c.nombre, color: COLOR_MSI, deuda: true,
+      total: meses.reduce((t, m) => t + (msiActiva(c, m) ? c.pagoMensual : 0), 0), editar: () => abrir('msi', c),
+    })),
+  ].filter((x) => x.total > 0).sort((x, y) => y.total - x.total);
 
   return (
     <>
@@ -158,7 +166,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
           <h2>Regla 50/20/30</h2>
           <p className="note first">
             Qué parte de tu ingreso fijo ({fmt(rg.ingresoFijo)} {cuando}, sin bonos ni aguinaldo) se va a cada cosa. La guía: hasta {META.basico}% en básicos,
-            hasta {META.lujo}% en lujos y al menos {META.ahorro}% en ahorro. Las deudas no entran en esos tres: su tope sano es {TOPE_DEUDA}%.
+            hasta {META.lujo}% en lujos y al menos {META.ahorro}% en ahorro. Entre los tres suman todo lo que gastas; lo que no usas es tu sobrante.
           </p>
           <div className="personas">
             {grupos.map((g) => {
@@ -169,34 +177,46 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
               return (
                 <div
                   key={g.id} className="persona meta" role="button" tabIndex={0} aria-pressed={grupoAbierto === g.id}
-                  aria-label={`${g.nombre}: ver qué incluye`}
-                  onClick={() => setGrupoAbierto(grupoAbierto === g.id ? null : g.id)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    e.preventDefault();
-                    setGrupoAbierto(grupoAbierto === g.id ? null : g.id);
-                  }}
+                  aria-label={`${g.nombre}: ver qué incluye`} onClick={() => alternarGrupo(g.id)} onKeyDown={alTeclear(g.id)}
                 >
                   <h3>{g.nombre}</h3>
-                  <p className={'metanum' + (bien ? '' : ' neg')}>{Math.round(p)}%<small>{g.minimo ? 'meta: al menos' : g.id === 'deuda' ? 'tope:' : 'meta: hasta'} {g.meta}%</small></p>
+                  <p className={'metanum' + (bien ? '' : ' neg')}>{Math.round(p)}%<small>{g.minimo ? 'meta: al menos' : 'meta: hasta'} {g.meta}%</small></p>
                   <div className="conmeta" role="img" aria-label={`${g.nombre}: ${Math.round(p)}% del ingreso fijo; la guía es ${g.meta}%`}>
                     <span className="track"><i className="grow" style={{ width: `${Math.min(p, 100)}%`, background: bien ? 'var(--in)' : 'var(--neg)' }} /></span>
                     <span className="marca" style={{ left: `${g.meta}%` }} />
                   </div>
                   <p className="note">
                     <b>{fmt(g.total)}</b> {cuando}.{' '}
-                    {g.id === 'deuda'
-                      ? bien
-                        ? <>Te cabe otra mensualidad de hasta <b>{fmt(Math.max(rg.margenDeuda, 0))}</b> al mes.</>
-                        : <>Te pasas del tope por <b className="neg">{fmt(dif)}</b>; no conviene sumar otra mensualidad.</>
-                      : g.minimo
-                        ? bien ? <>Cumples la meta, con {fmt(dif)} de más.</> : <>Te faltan <b className="neg">{fmt(dif)}</b> para la meta.</>
-                        : bien ? <>Te quedan {fmt(dif)} antes del límite.</> : <>Te pasas por <b className="neg">{fmt(dif)}</b>.</>}
+                    {g.minimo
+                      ? bien ? <>Cumples la meta, con {fmt(dif)} de más.</> : <>Te faltan <b className="neg">{fmt(dif)}</b> para la meta.</>
+                      : bien ? <>Te quedan {fmt(dif)} antes del límite.</> : <>Te pasas por <b className="neg">{fmt(dif)}</b>.</>}
                   </p>
                   <p className="note metaque">{g.que}</p>
                 </div>
               );
             })}
+          </div>
+          <h3>Aparte: nivel de endeudamiento</h3>
+          <div
+            className="persona meta deudabox" role="button" tabIndex={0} aria-pressed={grupoAbierto === 'deuda'}
+            aria-label="Pagos de deuda: ver cuáles son" onClick={() => alternarGrupo('deuda')} onKeyDown={alTeclear('deuda')}
+          >
+            <div>
+              <p className={'metanum' + (pctDeuda <= TOPE_DEUDA ? '' : ' neg')}>{Math.round(pctDeuda)}%<small>tope sano: {TOPE_DEUDA}%</small></p>
+              <div className="conmeta" role="img" aria-label={`Pagos de deuda: ${Math.round(pctDeuda)}% del ingreso fijo; el tope es ${TOPE_DEUDA}%`}>
+                <span className="track"><i className="grow" style={{ width: `${Math.min(pctDeuda, 100)}%`, background: pctDeuda <= TOPE_DEUDA ? 'var(--in)' : 'var(--neg)' }} /></span>
+                <span className="marca" style={{ left: `${TOPE_DEUDA}%` }} />
+              </div>
+            </div>
+            <div>
+              <p className="note">
+                De lo que gastas, <b>{fmt(rg.deuda)}</b> {cuando} son pagos de deuda: meses sin intereses y créditos.{' '}
+                {pctDeuda <= TOPE_DEUDA
+                  ? <>Te cabe otra mensualidad de hasta <b>{fmt(Math.max(rg.margenDeuda, 0))}</b> al mes.</>
+                  : <>Te pasas del tope por <b className="neg">{fmt(-rg.margenDeuda * meses.length)}</b>; no conviene sumar otra mensualidad.</>}
+              </p>
+              <p className="note metaque">No es un cuarto grupo: estos pagos ya están contados arriba, en básicos o en lujos.</p>
+            </div>
           </div>
           {abierto && (
             <section key={abierto.id} className="mesdet" aria-live="polite" aria-label={`Qué incluye ${abierto.nombre}`}>
@@ -210,7 +230,10 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                 <ul className="rank cols">
                   {incluidos.map((x) => (
                     <li key={x.id}>
-                      <span className="nm"><span className="dot" style={{ background: x.color }} /><button className="link" onClick={x.editar}>{x.nombre}</button></span>
+                      <span className="nm">
+                        <span className="dot" style={{ background: x.color }} /><button className="link" onClick={x.editar}>{x.nombre}</button>
+                        {x.deuda && abierto.id !== 'deuda' && <span className="flag">deuda</span>}
+                      </span>
                       <span className="pct">{pct(x.total, abierto.total)}</span>
                       <span className="amt">{fmt(x.total)}</span>
                       <span className="track"><i className="grow out" style={{ width: `${Math.min((x.total / (abierto.total || 1)) * 100, 100)}%` }} /></span>
@@ -219,11 +242,11 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                 </ul>
               )}
               <p className="note">
-                {incluidos.length} {incluidos.length === 1 ? 'concepto' : 'conceptos'}; el porcentaje es su parte del grupo. Toca uno para editarlo o cambiarle el tipo.
+                {incluidos.length} {incluidos.length === 1 ? 'concepto' : 'conceptos'}; el porcentaje es su parte de este total. Toca uno para editarlo o cambiarle el tipo.
               </p>
             </section>
           )}
-          <p className="note">Toca un grupo para ver qué incluye. Cada gasto toma el tipo de su categoría (se cambia en Datos → Categorías); en la tabla de Detalle puedes ponerle otro a un gasto en particular. {datos !== real && 'Incluye el escenario de recortes activo.'}</p>
+          <p className="note">Toca un grupo para ver qué incluye. Cada gasto toma el tipo de su categoría (se cambia en Datos → Categorías); en la tabla de Detalle puedes ponerle otro a un gasto en particular, y decir si una compra a meses es básica o lujo. {datos !== real && 'Incluye el escenario de recortes activo.'}</p>
         </section>
       )}
 
@@ -386,6 +409,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                           <button className="link" onClick={() => abrir('gastos', g)}>{g.nombre}</button>
                           {g.recortable && <span className="flag">{fuera ? 'recortado' : 'recortable'}</span>}
                           {g.split && <span className="flag">split</span>}
+                          {g.deuda && <span className="flag">deuda</span>}
                           {g.nota && <small>{g.nota}</small>}
                           {g.split && <small>{textoSplit(g.split)}</small>}
                           {reparto(g) && <small>{reparto(g)}</small>}
@@ -440,7 +464,15 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                       </td>
                       <td className="r">{fmt(c.pagoMensual)}</td>
                       <td>{k} de {c.plazoTotal} {k === 1 ? 'pago restante' : 'pagos restantes'}<small>termina en {mesLargo(finMSI(c))}</small></td>
-                      <td>Deuda</td>
+                      <td>
+                        <select
+                          aria-label={`Tipo de ${c.nombre}`}
+                          value={claseDeMsi(c)}
+                          onChange={(e) => store.guardar('msi', { ...c, clase: e.target.value as 'basico' | 'lujo' })}
+                        >
+                          {CLASES.filter(([v]) => v !== 'ahorro').map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                        </select>
+                      </td>
                       <td className="r">{fmt(anual ? c.pagoMensual * k : c.inicio <= mes ? c.pagoMensual : 0)}</td>
                     </tr>
                   );

@@ -40,7 +40,7 @@ const HERRAMIENTAS: Herramienta[] = [
     name: 'resumen',
     title: 'Resumen de ingresos y egresos',
     description:
-      'Ingresos, egresos y sobrante del hogar, con el desglose por categoría y, si lo comparten varias personas, lo que le toca aportar y le queda a cada una. Incluye la regla 50/20/30 (qué parte del ingreso fijo se va a básicos, lujos y ahorro) y el nivel de endeudamiento contra su tope de 30 %, con el margen para otra mensualidad. Úsala para preguntas como "¿cuánto me sobra este mes?", "¿en qué se va mi dinero?" o "¿puedo meter otra compra a meses?". Montos en pesos mexicanos (MXN).',
+      'Ingresos, egresos y sobrante del hogar, con el desglose por categoría y, si lo comparten varias personas, lo que le toca aportar y le queda a cada una. Incluye la regla 50/20/30 (qué parte del ingreso fijo se va a básicos, lujos y ahorro, que entre los tres suman todo lo gastado) y, aparte, el nivel de endeudamiento contra su tope de 30 %, con el margen para otra mensualidad. Úsala para preguntas como "¿cuánto me sobra este mes?", "¿en qué se va mi dinero?" o "¿puedo meter otra compra a meses?". Montos en pesos mexicanos (MXN).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -73,7 +73,7 @@ const HERRAMIENTAS: Herramienta[] = [
     name: 'gastos',
     title: 'Lista de gastos',
     description:
-      'Gastos y ahorros registrados, ordenados por lo que cuestan en el mes. Se puede filtrar por nombre de categoría (por ejemplo "Suscripciones"). Incluye el tipo de cada uno (básico, lujo, ahorro o deuda), cuáles se pagan solo en ciertos meses (soloEnMeses; fuera de ellos cuestan 0), cuáles están marcados como recortables y, si el hogar tiene varios miembros, cuánto le toca pagar a cada uno.',
+      'Gastos y ahorros registrados, ordenados por lo que cuestan en el mes. Se puede filtrar por nombre de categoría (por ejemplo "Suscripciones"). Incluye el tipo de cada uno (básico, lujo o ahorro), si es una deuda, cuáles se pagan solo en ciertos meses (soloEnMeses; fuera de ellos cuestan 0), cuáles están marcados como recortables y, si el hogar tiene varios miembros, cuánto le toca pagar a cada uno.',
     inputSchema: {
       type: 'object',
       properties: { mes: MES, categoria: { type: 'string', description: 'Nombre exacto de la categoría para filtrar. Opcional.' } },
