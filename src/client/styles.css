@@ -350,6 +350,10 @@ input[type=checkbox]:checked::after{content:'';width:11px;height:6px;border:2px 
 .personas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:16px}
 .persona{display:grid;gap:12px;padding:16px;background:var(--control);border:1px solid var(--border)}
 .meta{align-content:start;gap:8px}
+.meta[role="button"]{cursor:pointer;transition:border-color .15s}
+.meta[role="button"]:hover{border-color:var(--border-strong)}
+.meta[role="button"][aria-pressed="true"]{border-color:var(--brand-strong);box-shadow:inset 0 0 0 1px var(--brand-strong)}
+.personas + .mesdet{margin-top:16px}
 .metanum{margin:0;color:var(--heading);font-size:28px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
 .metanum.neg{color:var(--bad-fg)}
 .metanum small{font-size:12px;font-weight:500;color:var(--subtle)}

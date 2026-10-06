@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import {
-  CATEGORIA_INVERSIONES, claseDeGasto, diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, META, msiRestanteTotal, pagosRestantes,
+  CATEGORIA_INVERSIONES, claseDeGasto, diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, META, msiActiva, msiRestanteTotal, pagosRestantes,
   proyeccion, rangoMeses, regla, rendimientoMensual, resumen, resumenPorPersona, saldoInversion, tasaEfectivaAnual, TOPE_DEUDA, totalInversiones,
 } from '../shared/calc.ts';
 import type { Clase, Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
@@ -22,6 +23,7 @@ interface Props {
 
 export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abrir }: Props) {
   const [periodo, setPeriodo] = usePref<'mes' | 'anio'>('periodo', 'mes');
+  const [grupoAbierto, setGrupoAbierto] = useState<Clase | null>(null);
   const anual = periodo === 'anio';
   const meses = anual ? rangoMeses(mes, 12) : [mes];
   const r = resumen(datos, mes, periodo);
@@ -67,11 +69,23 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
   const cuando = anual ? 'al año' : 'al mes';
   // Básicos, lujos y deudas tienen un máximo; el ahorro, un mínimo.
   const grupos = [
-    { id: 'basico', nombre: 'Básicos', total: rg.basico, meta: META.basico, minimo: false, que: 'Lo que necesitas sí o sí para vivir.' },
-    { id: 'lujo', nombre: 'Lujos', total: rg.lujo, meta: META.lujo, minimo: false, que: 'Lo que podrías dejar sin que falte lo esencial.' },
-    { id: 'ahorro', nombre: 'Ahorro', total: rg.ahorro, meta: META.ahorro, minimo: true, que: 'Lo que guardas o inviertes.' },
-    { id: 'deuda', nombre: 'Deudas', total: rg.deuda, meta: TOPE_DEUDA, minimo: false, que: 'Meses sin intereses y créditos. Se miden aparte.' },
+    { id: 'basico' as Clase, nombre: 'Básicos', total: rg.basico, meta: META.basico, minimo: false, que: 'Lo que necesitas sí o sí para vivir.' },
+    { id: 'lujo' as Clase, nombre: 'Lujos', total: rg.lujo, meta: META.lujo, minimo: false, que: 'Lo que podrías dejar sin que falte lo esencial.' },
+    { id: 'ahorro' as Clase, nombre: 'Ahorro', total: rg.ahorro, meta: META.ahorro, minimo: true, que: 'Lo que guardas o inviertes.' },
+    { id: 'deuda' as Clase, nombre: 'Deudas', total: rg.deuda, meta: TOPE_DEUDA, minimo: false, que: 'Meses sin intereses y créditos. Se miden aparte.' },
   ];
+  // Lo que suma al grupo abierto, de mayor a menor: sus gastos y, en deudas, también las compras a MSI.
+  const abierto = grupos.find((g) => g.id === grupoAbierto);
+  const incluidos = !abierto ? [] : [
+    ...datos.gastos.filter((g) => claseDeGasto(real, g) === abierto.id).map((g) => {
+      const cat = real.categorias.find((c) => c.id === g.categoria);
+      return { id: g.id, nombre: g.nombre, color: colorDe(cat), total: meses.reduce((s, m) => s + gastoDelMes(datos, g, m), 0), editar: () => abrir('gastos', g) };
+    }),
+    ...(abierto.id !== 'deuda' ? [] : datos.msi.map((c) => ({
+      id: c.id, nombre: c.nombre, color: COLOR_MSI,
+      total: meses.reduce((s, m) => s + (msiActiva(c, m) ? c.pagoMensual : 0), 0), editar: () => abrir('msi', c),
+    }))),
+  ].filter((x) => x.total > 0).sort((a, b) => b.total - a.total);
 
   return (
     <>
@@ -153,7 +167,16 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
               const bien = g.minimo ? p >= g.meta : p <= g.meta;
               const dif = Math.abs(g.total - objetivo);
               return (
-                <div key={g.id} className="persona meta">
+                <div
+                  key={g.id} className="persona meta" role="button" tabIndex={0} aria-pressed={grupoAbierto === g.id}
+                  aria-label={`${g.nombre}: ver qué incluye`}
+                  onClick={() => setGrupoAbierto(grupoAbierto === g.id ? null : g.id)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setGrupoAbierto(grupoAbierto === g.id ? null : g.id);
+                  }}
+                >
                   <h3>{g.nombre}</h3>
                   <p className={'metanum' + (bien ? '' : ' neg')}>{Math.round(p)}%<small>{g.minimo ? 'meta: al menos' : g.id === 'deuda' ? 'tope:' : 'meta: hasta'} {g.meta}%</small></p>
                   <div className="conmeta" role="img" aria-label={`${g.nombre}: ${Math.round(p)}% del ingreso fijo; la guía es ${g.meta}%`}>
@@ -175,7 +198,32 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
               );
             })}
           </div>
-          <p className="note">Cada gasto toma el tipo de su categoría (se cambia en Datos → Categorías); en la tabla de Detalle puedes ponerle otro a un gasto en particular. {datos !== real && 'Incluye el escenario de recortes activo.'}</p>
+          {abierto && (
+            <section key={abierto.id} className="mesdet" aria-live="polite" aria-label={`Qué incluye ${abierto.nombre}`}>
+              <header>
+                <h3>{abierto.nombre}: {fmt(abierto.total)} {cuando}</h3>
+                <button type="button" className="link" onClick={() => setGrupoAbierto(null)}>Cerrar</button>
+              </header>
+              {incluidos.length === 0 ? (
+                <p className="note">No hay nada en este grupo {anual ? 'en los próximos 12 meses' : 'este mes'}.</p>
+              ) : (
+                <ul className="rank cols">
+                  {incluidos.map((x) => (
+                    <li key={x.id}>
+                      <span className="nm"><span className="dot" style={{ background: x.color }} /><button className="link" onClick={x.editar}>{x.nombre}</button></span>
+                      <span className="pct">{pct(x.total, abierto.total)}</span>
+                      <span className="amt">{fmt(x.total)}</span>
+                      <span className="track"><i className="grow out" style={{ width: `${Math.min((x.total / (abierto.total || 1)) * 100, 100)}%` }} /></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="note">
+                {incluidos.length} {incluidos.length === 1 ? 'concepto' : 'conceptos'}; el porcentaje es su parte del grupo. Toca uno para editarlo o cambiarle el tipo.
+              </p>
+            </section>
+          )}
+          <p className="note">Toca un grupo para ver qué incluye. Cada gasto toma el tipo de su categoría (se cambia en Datos → Categorías); en la tabla de Detalle puedes ponerle otro a un gasto en particular. {datos !== real && 'Incluye el escenario de recortes activo.'}</p>
         </section>
       )}
 
