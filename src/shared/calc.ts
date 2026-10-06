@@ -1,6 +1,6 @@
-import type { CompraMSI, Datos, Frecuencia, Gasto, Ingreso, Mes, Persona, Reparto, Split } from './tipos.ts';
+import type { Capitalizacion, Clase, CompraMSI, Datos, Frecuencia, Gasto, Ingreso, Inversion, Mes, Persona, Reparto, Split } from './tipos.ts';
 
-export const FACTOR: Record<Frecuencia, number> = { mes: 1, bimestre: 1 / 2, anio: 1 / 12 };
+export const FACTOR: Record<Frecuencia, number> = { mes: 1, bimestre: 1 / 2, trimestre: 1 / 3, anio: 1 / 12 };
 
 export function sumarMeses(m: Mes, n: number): Mes {
   const [y, mo] = m.split('-').map(Number);
@@ -60,8 +60,48 @@ export function gastoDelMes(cal: Calendario, g: Gasto, mes: Mes): number {
 export const ingresoVigente = (x: Ingreso, mes: Mes): boolean =>
   (!x.desde || mes >= x.desde) && (!x.hasta || mes <= x.hasta);
 
+const PERIODOS_AL_ANIO: Record<Capitalizacion, number> = { diaria: 365, mensual: 12, anual: 1 };
+
+/** Lo que crece en un año con el interés compuesto de su capitalización, en proporción (0.1047 = 10.47 %). */
+export const tasaEfectivaAnual = (x: Pick<Inversion, 'tasa' | 'capitalizacion'>): number => {
+  const n = PERIODOS_AL_ANIO[x.capitalizacion];
+  return (1 + x.tasa / 100 / n) ** n - 1;
+};
+
+/**
+ * Saldo estimado en `mes`. Si el rendimiento se reinvierte, el saldo capturado crece con interés compuesto
+ * desde el mes en que se capturó; si se retira cada mes (cuenta como ingreso), se queda igual.
+ */
+export function saldoInversion(x: Inversion, mes: Mes): number {
+  if (x.comoIngreso || !x.desde) return x.monto;
+  return x.monto * (1 + tasaEfectivaAnual(x)) ** (Math.max(0, difMeses(x.desde, mes)) / 12);
+}
+
+/** Rendimiento estimado de un mes sobre un saldo: el que, compuesto doce veces, da la tasa efectiva anual. */
+export const rendimientoMensual = (x: Inversion, mes?: Mes): number =>
+  (mes ? saldoInversion(x, mes) : x.monto) * ((1 + tasaEfectivaAnual(x)) ** (1 / 12) - 1);
+
+/** Lo invertido en `mes`: lo que ve todo el hogar y lo privado de quien consulta. */
+export function totalInversiones(d: Datos, mes: Mes): { compartido: number; personal: number } {
+  const t = { compartido: 0, personal: 0 };
+  for (const x of d.inversiones ?? []) t[x.privadaDe ? 'personal' : 'compartido'] += saldoInversion(x, mes);
+  return t;
+}
+
+/** Categoría con la que entran a las cuentas los rendimientos que se cuentan como ingreso. */
+export const CATEGORIA_INVERSIONES = 'inversiones';
+
+/** Los ingresos capturados más el rendimiento mensual de las inversiones que cuentan como ingreso. */
+export const ingresosCon = (d: Datos): Ingreso[] => [
+  ...d.ingresos,
+  ...(d.inversiones ?? []).filter((x) => x.comoIngreso).map((x): Ingreso => ({
+    id: x.id, nombre: x.nombre, categoria: CATEGORIA_INVERSIONES, monto: rendimientoMensual(x),
+    reparto: x.privadaDe ? { tipo: 'solo', de: x.privadaDe } : x.reparto,
+  })),
+];
+
 export const ingresoDelMes = (d: Datos, mes: Mes): number =>
-  d.ingresos.reduce((s, x) => s + (ingresoVigente(x, mes) ? x.monto : 0), 0);
+  ingresosCon(d).reduce((s, x) => s + (ingresoVigente(x, mes) ? x.monto : 0), 0);
 
 export const fijosDelMes = (d: Datos, mes: Mes): number =>
   d.gastos.reduce((s, g) => s + gastoDelMes(d, g, mes), 0);
@@ -130,7 +170,7 @@ export interface Resumen {
 export function resumen(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): Resumen {
   const meses = periodo === 'mes' ? [mes] : rangoMeses(mes, 12);
   const ingresosPorCategoria: Record<string, number> = {};
-  for (const x of d.ingresos) {
+  for (const x of ingresosCon(d)) {
     const total = x.monto * meses.filter((m) => ingresoVigente(x, m)).length;
     const cat = x.categoria ?? '';
     ingresosPorCategoria[cat] = (ingresosPorCategoria[cat] ?? 0) + total;
@@ -173,7 +213,7 @@ export function resumenPorPersona(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): 
   const ingresos = miembros.map(() => 0);
   const egresos = miembros.map(() => 0);
   const sumar = (a: number[], partes: number[]) => partes.forEach((p, i) => (a[i] += p));
-  for (const x of d.ingresos) {
+  for (const x of ingresosCon(d)) {
     const n = meses.filter((m) => ingresoVigente(x, m)).length;
     sumar(ingresos, repartir(x.reparto, x.monto * n, miembros, n));
   }
@@ -186,4 +226,37 @@ export function resumenPorPersona(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): 
     sumar(egresos, repartir(c.reparto, c.pagoMensual * pagos, miembros, pagos));
   }
   return miembros.map((persona, i) => ({ persona, ingresos: ingresos[i], egresos: egresos[i], sobrante: ingresos[i] - egresos[i] }));
+}
+
+/** Regla 50/20/30: parte del ingreso fijo para básicos, lujos y ahorro. Las deudas se miden aparte, con tope. */
+export const META: Record<Exclude<Clase, 'deuda'>, number> = { basico: 50, lujo: 20, ahorro: 30 };
+export const TOPE_DEUDA = 30;
+
+/** La clase que se le puso al gasto o, si no tiene, la de su categoría (básico si la categoría no dice). */
+export const claseDeGasto = (d: Pick<Datos, 'categorias'>, g: Pick<Gasto, 'clase' | 'categoria'>): Clase =>
+  g.clase ?? d.categorias.find((c) => c.id === g.categoria)?.clase ?? 'basico';
+
+/** Ingreso con el que se vive mes a mes: sin los de una sola vez (bono, aguinaldo). */
+export const ingresoFijoDelMes = (d: Datos, mes: Mes): number =>
+  ingresosCon(d).reduce((s, x) => s + (ingresoVigente(x, mes) && !(x.desde && x.desde === x.hasta) ? x.monto : 0), 0);
+
+export interface Regla {
+  ingresoFijo: number;
+  basico: number;
+  lujo: number;
+  ahorro: number;
+  deuda: number; // gastos marcados como deuda + pagos de MSI
+  margenDeuda: number; // cuánto más se puede pagar de deudas al mes sin pasar del tope; negativo si ya se pasó
+}
+
+/** Cuánto se va a cada clase en el periodo. En vista anual, `margenDeuda` es el promedio mensual. */
+export function regla(d: Datos, mes: Mes, periodo: 'mes' | 'anio'): Regla {
+  const meses = periodo === 'mes' ? [mes] : rangoMeses(mes, 12);
+  const r = { ingresoFijo: 0, basico: 0, lujo: 0, ahorro: 0, deuda: 0 };
+  for (const m of meses) {
+    r.ingresoFijo += ingresoFijoDelMes(d, m);
+    r.deuda += msiDelMes(d, m);
+    for (const g of d.gastos) r[claseDeGasto(d, g)] += gastoDelMes(d, g, m);
+  }
+  return { ...r, margenDeuda: ((r.ingresoFijo * TOPE_DEUDA) / 100 - r.deuda) / meses.length };
 }

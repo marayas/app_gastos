@@ -102,4 +102,30 @@ export const MIGRACIONES: string[] = [
   `
   ALTER TABLE usuarios ADD COLUMN tema TEXT;
   `,
+  // 8: clase de cada gasto para la regla 50/20/30 (básico, lujo, ahorro o deuda); vacío = según su categoría.
+  `
+  ALTER TABLE gastos ADD COLUMN clase TEXT;
+  `,
+  // 9: cada categoría de gasto dice la clase que toman sus gastos. Las que ya existían arrancan con la habitual.
+  `
+  ALTER TABLE categorias ADD COLUMN clase TEXT;
+  UPDATE categorias SET clase = CASE
+    WHEN id = 'ahorro' THEN 'ahorro'
+    WHEN id IN ('personal', 'suscripciones') THEN 'lujo'
+    ELSE 'basico' END
+  WHERE tipo = 'gasto';
+  `,
+  // 10: inversiones. `privada_de` es el miembro del hogar que la ve; vacío = la ve todo el hogar.
+  `
+  CREATE TABLE inversiones (
+    usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    id TEXT NOT NULL, nombre TEXT NOT NULL, monto REAL NOT NULL, tasa REAL NOT NULL, capitalizacion TEXT NOT NULL,
+    como_ingreso INTEGER NOT NULL DEFAULT 0, privada_de TEXT, reparto TEXT,
+    PRIMARY KEY (usuario_id, id)
+  );
+  `,
+  // 11: mes en que se capturó el saldo de una inversión, para estimar cómo crece si se reinvierte.
+  `
+  ALTER TABLE inversiones ADD COLUMN desde TEXT;
+  `,
 ];

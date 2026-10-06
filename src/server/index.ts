@@ -73,7 +73,7 @@ function iniciarSesion(res: FastifyReply, usuario: Usuario): Sesion {
 }
 
 /** Datos del usuario de la sesión, o del hogar que comparte; es la única puerta a la información. */
-const datosDe = (req: FastifyRequest) => almacen.para(almacen.hogarDe(req.usuario!.id));
+const datosDe = (req: FastifyRequest) => almacen.para(almacen.hogarDe(req.usuario!.id), req.usuario!.id);
 
 function soloAdmin(req: FastifyRequest) {
   if (req.usuario?.rol !== 'admin') throw new ErrorPeticion('Solo el administrador puede hacer esto', 403);

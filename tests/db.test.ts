@@ -36,6 +36,24 @@ describe('datos de un usuario', () => {
     expect(a.leerDatos().gastos.some((x) => x.id === id)).toBe(false);
   });
 
+  it('las categorías de gasto guardan la clase de sus gastos', () => {
+    const { a } = conAdmin();
+    const clases = Object.fromEntries(a.leerDatos().categorias.map((c) => [c.id, c.clase]));
+    expect(clases).toMatchObject({ ahorro: 'ahorro', personal: 'lujo', suscripciones: 'lujo' });
+    expect(clases.sueldo).toBeUndefined();
+    a.crear('categorias', { id: 'viajes', nombre: 'Viajes', tipo: 'gasto', color: 'c1', orden: 20, clase: 'lujo' });
+    a.actualizar('categorias', 'viajes', { nombre: 'Viajes', tipo: 'gasto', color: 'c1', orden: 20, clase: 'ahorro' });
+    expect(a.leerDatos().categorias.find((c) => c.id === 'viajes')?.clase).toBe('ahorro');
+  });
+
+  it('guarda la clase y la frecuencia trimestral de un gasto', () => {
+    const { a } = conAdmin();
+    const { id } = a.crear('gastos', { nombre: 'Agua', categoria: 'casa', monto: 900, frecuencia: 'trimestre', clase: 'basico' });
+    expect(a.leerDatos().gastos.find((x) => x.id === id)).toMatchObject({ frecuencia: 'trimestre', clase: 'basico' });
+    expect(() => a.crear('gastos', { nombre: 'X', categoria: 'casa', monto: 1, frecuencia: 'mes', clase: 'capricho' })).toThrow();
+    expect(() => a.crear('gastos', { nombre: 'X', categoria: 'casa', monto: 1, frecuencia: 'semestre' })).toThrow();
+  });
+
   it('guarda y quita los meses de un gasto', () => {
     const { a } = conAdmin();
     const gasto = { nombre: 'Plomero', categoria: 'casa', monto: 3000, frecuencia: 'mes' };
@@ -206,6 +224,36 @@ describe('usuarios y segregación', () => {
     expect(almacen.verificarClave('Admin', 'otra-clave')).toBeNull();
     expect(almacen.verificarClave('nadie', 'secreto-largo')).toBeNull();
     expect(Object.keys(almacen.listarUsuarios()[0]).sort()).toEqual(['hogar', 'id', 'nombre', 'rol']);
+  });
+
+  it('una inversión privada solo la ve y la toca su dueño dentro del hogar, y lo sigue si sale', () => {
+    const { almacen, admin } = conAdmin();
+    const ana = almacen.crearUsuario('Ana', 'secreto-largo', 'usuario', SEMILLA_BASE);
+    almacen.asignarHogar(ana.id, admin.id);
+    const deAdmin = almacen.para(admin.id, admin.id);
+    const deAna = almacen.para(admin.id, ana.id);
+    const inv = { nombre: 'Cetes', monto: 50000, tasa: 10.5, capitalizacion: 'diaria', comoIngreso: true };
+    deAdmin.crear('inversiones', { ...inv, id: 'comun' });
+    // Aunque pida ponerla a nombre de otro, queda a nombre de quien la guarda.
+    deAna.crear('inversiones', { ...inv, id: 'secreta', nombre: 'Fondo de Ana', privadaDe: admin.id });
+    const ids = (a: typeof deAna) => (a.leerDatos().inversiones ?? []).map((x) => x.id);
+    expect(ids(deAna)).toEqual(['comun', 'secreta']);
+    expect(ids(deAdmin)).toEqual(['comun']);
+    expect(deAna.leerDatos().inversiones?.[1].privadaDe).toBe(ana.id);
+
+    expect(() => deAdmin.actualizar('inversiones', 'secreta', inv)).toThrow('No existe');
+    deAdmin.borrar('inversiones', 'secreta');
+    deAdmin.importar({ ...EJEMPLO, inversiones: [] }); // reemplazar los datos del hogar no borra lo privado de otro
+    expect(ids(deAna)).toEqual(['secreta']);
+
+    almacen.asignarHogar(ana.id, null);
+    expect(ids(almacen.para(ana.id))).toEqual(['secreta']);
+    expect(ids(deAdmin)).toEqual([]);
+    almacen.asignarHogar(ana.id, admin.id);
+    expect(ids(deAna)).toEqual(['secreta']);
+    almacen.borrarUsuario(ana.id);
+    expect(ids(almacen.para(admin.id, ana.id))).toEqual([]);
+    expect(() => deAdmin.crear('inversiones', { ...inv, capitalizacion: 'semanal' })).toThrow();
   });
 
   it('cada usuario guarda su tema', () => {

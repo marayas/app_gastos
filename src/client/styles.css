@@ -349,6 +349,14 @@ input[type=checkbox]:checked::after{content:'';width:11px;height:6px;border:2px 
 .spark.big + .mesdet{margin:16px 0}
 .personas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:16px}
 .persona{display:grid;gap:12px;padding:16px;background:var(--control);border:1px solid var(--border)}
+.meta{align-content:start;gap:8px}
+.metanum{margin:0;color:var(--heading);font-size:28px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.metanum.neg{color:var(--bad-fg)}
+.metanum small{font-size:12px;font-weight:500;color:var(--subtle)}
+.conmeta{position:relative;padding:4px 0}
+.conmeta .marca{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--heading)}
+.meta .note{margin:0}
+.meta .metaque{color:var(--subtle);font-size:12px}
 .persona h3{margin:0;font-size:14px;font-weight:600;color:var(--heading)}
 .persona dl{margin:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .persona dt{font-size:12px;color:var(--subtle)}
@@ -417,6 +425,7 @@ td select{font-size:13px;color:var(--body)}
 .psub .amt{font-size:16px}
 .lrow{display:flex;align-items:center;gap:16px;padding:12px 0;border-top:1px solid var(--border);font-size:14px}
 .lrow .pn{flex:1;color:var(--heading)}
+h2 + .lrow{border-top:0;padding-top:0}
 .sub2{margin-top:24px}
 .sub2 + *{margin-top:8px}
 details{margin-top:16px;font-size:14px}

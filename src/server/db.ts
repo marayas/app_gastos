@@ -14,18 +14,22 @@ export class ErrorPeticion extends Error {
   }
 }
 
-type Tipo = 'texto' | 'texto?' | 'numero' | 'entero' | 'bool' | 'mes' | 'mes?' | 'fecha' | 'frecuencia' | 'meses?' | 'porDia?' | 'split?' | 'reparto?' | 'tipoCategoria';
+type Tipo = 'texto' | 'texto?' | 'numero' | 'entero' | 'bool' | 'mes' | 'mes?' | 'fecha' | 'frecuencia' | 'capitalizacion' | 'clase?' | 'meses?' | 'porDia?' | 'split?' | 'reparto?' | 'tipoCategoria';
 type Celda = string | number | null;
 
 const COLECCIONES: Record<Coleccion, { tabla: string; campos: Record<string, Tipo> }> = {
-  categorias: { tabla: 'categorias', campos: { nombre: 'texto', tipo: 'tipoCategoria', color: 'texto', orden: 'entero' } },
+  categorias: { tabla: 'categorias', campos: { nombre: 'texto', tipo: 'tipoCategoria', color: 'texto', orden: 'entero', clase: 'clase?' } },
   ingresos: { tabla: 'ingresos', campos: { nombre: 'texto', categoria: 'texto?', monto: 'numero', desde: 'mes?', hasta: 'mes?', reparto: 'reparto?' } },
   gastos: {
     tabla: 'gastos',
     campos: {
-      nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia', meses: 'meses?',
+      nombre: 'texto', categoria: 'texto', monto: 'numero', frecuencia: 'frecuencia', clase: 'clase?', meses: 'meses?',
       recortable: 'bool', nota: 'texto?', porDia: 'porDia?', split: 'split?', reparto: 'reparto?',
     },
+  },
+  inversiones: {
+    tabla: 'inversiones',
+    campos: { nombre: 'texto', monto: 'numero', desde: 'mes?', tasa: 'numero', capitalizacion: 'capitalizacion', comoIngreso: 'bool', privadaDe: 'texto?', reparto: 'reparto?' },
   },
   msi: { tabla: 'compras_msi', campos: { nombre: 'texto', pagoMensual: 'numero', plazoTotal: 'entero', inicio: 'mes', reparto: 'reparto?' } },
   ciclos: { tabla: 'ciclos_escolares', campos: { nombre: 'texto', inicio: 'fecha', fin: 'fecha' } },
@@ -70,7 +74,11 @@ function aCelda(tipo: Tipo, v: unknown, campo: string): Celda {
     case 'fecha':
       return typeof v === 'string' && RE_FECHA.test(v) ? v : falla();
     case 'frecuencia':
-      return v === 'mes' || v === 'bimestre' || v === 'anio' ? v : falla();
+      return v === 'mes' || v === 'bimestre' || v === 'trimestre' || v === 'anio' ? v : falla();
+    case 'capitalizacion':
+      return v === 'diaria' || v === 'mensual' || v === 'anual' ? v : falla();
+    case 'clase?':
+      return v === 'basico' || v === 'lujo' || v === 'ahorro' || v === 'deuda' ? v : falla();
     case 'tipoCategoria':
       return v === 'gasto' || v === 'ingreso' ? v : falla();
     case 'meses?': {
@@ -152,8 +160,19 @@ export function abrirAlmacen(ruta: string) {
     });
   }
 
-  /** Operaciones sobre los datos de un solo usuario; ninguna consulta sale de su usuario_id. */
-  function para(uid: string) {
+  /**
+   * Operaciones sobre los datos de un solo usuario; ninguna consulta sale de su usuario_id.
+   * `visor` es quien consulta: en un hogar compartido no ve ni toca las inversiones privadas de otro miembro.
+   */
+  function para(uid: string, visor = uid) {
+    /** Condición extra y sus parámetros para que una consulta solo alcance lo que el visor puede ver. */
+    const visible = (col: Coleccion): [string, string[]] =>
+      col === 'inversiones' ? [' AND (privada_de IS NULL OR privada_de = ?)', [visor]] : ['', []];
+
+    /** Una inversión privada siempre es de quien la guarda; nadie la puede poner a nombre de otro. */
+    const normalizar = (col: Coleccion, obj: Record<string, unknown>) =>
+      col === 'inversiones' ? { ...obj, privadaDe: obj.privadaDe ? visor : undefined } : obj;
+
     const tipoDeCategoria = (id: unknown) =>
       typeof id === 'string'
         ? (db.prepare('SELECT tipo FROM categorias WHERE usuario_id = ? AND id = ?').get(uid, id)?.tipo as string | undefined)
@@ -169,7 +188,7 @@ export function abrirAlmacen(ruta: string) {
 
     function insertar(col: Coleccion, cuerpo: unknown): string {
       const { tabla, campos } = COLECCIONES[col];
-      const obj = (cuerpo ?? {}) as Record<string, unknown>;
+      const obj = normalizar(col, (cuerpo ?? {}) as Record<string, unknown>);
       revisarCategoria(col, obj);
       const id = obj.id === undefined ? randomUUID() : obj.id;
       if (typeof id !== 'string' || !RE_ID.test(id)) throw new ErrorPeticion('Campo inválido: id');
@@ -188,7 +207,8 @@ export function abrirAlmacen(ruta: string) {
     function leer<T>(col: Coleccion): T[] {
       const { tabla, campos } = COLECCIONES[col];
       const orden = col === 'categorias' ? 'orden, rowid' : col === 'sinClases' ? 'desde' : 'rowid';
-      return db.prepare(`SELECT * FROM ${tabla} WHERE usuario_id = ? ORDER BY ${orden}`).all(uid).map((fila) => {
+      const [filtro, extra] = visible(col);
+      return db.prepare(`SELECT * FROM ${tabla} WHERE usuario_id = ?${filtro} ORDER BY ${orden}`).all(uid, ...extra).map((fila) => {
         const item: Record<string, unknown> = { id: fila.id };
         for (const k of Object.keys(campos)) {
           const v = deCelda(campos[k], fila[columna(k)]);
@@ -204,6 +224,7 @@ export function abrirAlmacen(ruta: string) {
         ingresos: leer('ingresos'),
         gastos: leer('gastos'),
         msi: leer('msi'),
+        inversiones: leer('inversiones'),
         ciclos: leer('ciclos'),
         sinClases: leer('sinClases'),
         // Quienes comparten estos datos: el dueño y los usuarios que están en su hogar.
@@ -223,12 +244,16 @@ export function abrirAlmacen(ruta: string) {
 
     function vaciar() {
       db.prepare('DELETE FROM pagos_marcados WHERE usuario_id = ?').run(uid);
-      for (const col of [...ORDEN].reverse()) db.prepare(`DELETE FROM ${COLECCIONES[col].tabla} WHERE usuario_id = ?`).run(uid);
+      for (const col of [...ORDEN].reverse()) {
+        const [filtro, extra] = visible(col);
+        db.prepare(`DELETE FROM ${COLECCIONES[col].tabla} WHERE usuario_id = ?${filtro}`).run(uid, ...extra);
+      }
     }
 
     function cargar(datos: Datos) {
       for (const col of ORDEN) {
         const lista = datos[col];
+        if (col === 'inversiones' && lista === undefined) continue; // respaldos anteriores a las inversiones
         if (!Array.isArray(lista)) throw new ErrorPeticion(`Falta la lista: ${col}`);
         for (const item of lista) insertar(col, item);
       }
@@ -242,7 +267,8 @@ export function abrirAlmacen(ruta: string) {
       crear: (col: Coleccion, cuerpo: unknown) => ({ id: insertar(col, cuerpo) }),
       actualizar(col: Coleccion, id: string, cuerpo: unknown) {
         const { tabla, campos } = COLECCIONES[col];
-        const obj = (cuerpo ?? {}) as Record<string, unknown>;
+        const obj = normalizar(col, (cuerpo ?? {}) as Record<string, unknown>);
+        const [filtro, extra] = visible(col);
         revisarCategoria(col, obj);
         if (col === 'categorias') {
           const tipo = tipoDeCategoria(id);
@@ -253,8 +279,8 @@ export function abrirAlmacen(ruta: string) {
         let cambios;
         try {
           cambios = db
-            .prepare(`UPDATE ${tabla} SET ${nombres.map((k) => `${columna(k)} = ?`).join(', ')} WHERE usuario_id = ? AND id = ?`)
-            .run(...valores, uid, id).changes;
+            .prepare(`UPDATE ${tabla} SET ${nombres.map((k) => `${columna(k)} = ?`).join(', ')} WHERE usuario_id = ? AND id = ?${filtro}`)
+            .run(...valores, uid, id, ...extra).changes;
         } catch (e) {
           throw aErrorPeticion(e);
         }
@@ -268,8 +294,9 @@ export function abrirAlmacen(ruta: string) {
           if (enUso) throw new ErrorPeticion('La categoría está en uso; cambia primero la categoría de esos gastos o ingresos', 409);
         }
         try {
+          const [filtro, extra] = visible(col);
           transaccion(() => {
-            db.prepare(`DELETE FROM ${COLECCIONES[col].tabla} WHERE usuario_id = ? AND id = ?`).run(uid, id);
+            db.prepare(`DELETE FROM ${COLECCIONES[col].tabla} WHERE usuario_id = ? AND id = ?${filtro}`).run(uid, id, ...extra);
             db.prepare('DELETE FROM pagos_marcados WHERE usuario_id = ? AND item_id = ?').run(uid, id);
           });
         } catch (e) {
@@ -311,7 +338,13 @@ export function abrirAlmacen(ruta: string) {
         if (hogar === id || buscarUsuario(hogar)?.hogar) throw new ErrorPeticion('Ese hogar no es válido');
         if (db.prepare('SELECT 1 FROM usuarios WHERE hogar = ?').get(id)) throw new ErrorPeticion('Otros usuarios comparten el hogar de esta cuenta');
       }
-      db.prepare('UPDATE usuarios SET hogar = ? WHERE id = ?').run(hogar, id);
+      // Sus inversiones privadas lo siguen: entran al hogar al que se une y regresan a sus datos cuando sale.
+      const mover = db.prepare('UPDATE inversiones SET usuario_id = ? WHERE usuario_id = ? AND privada_de = ?');
+      transaccion(() => {
+        if (usuario.hogar) mover.run(id, usuario.hogar, id);
+        if (hogar !== null) mover.run(hogar, id, id);
+        db.prepare('UPDATE usuarios SET hogar = ? WHERE id = ?').run(hogar, id);
+      });
     },
 
     temaDe(id: string): Tema | null {
@@ -401,6 +434,7 @@ export function abrirAlmacen(ruta: string) {
       if (usuario.rol === 'admin') throw new ErrorPeticion('No se puede borrar al administrador');
       transaccion(() => {
         para(id).vaciar();
+        db.prepare('DELETE FROM inversiones WHERE privada_de = ?').run(id);
         db.prepare('UPDATE usuarios SET hogar = NULL WHERE hogar = ?').run(id);
         db.prepare('DELETE FROM usuarios WHERE id = ?').run(id);
       });

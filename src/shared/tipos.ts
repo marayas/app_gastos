@@ -1,7 +1,13 @@
-export type Frecuencia = 'mes' | 'bimestre' | 'anio';
-
 /** Mes en formato "YYYY-MM". */
 export type Mes = string;
+
+export type Frecuencia = 'mes' | 'bimestre' | 'trimestre' | 'anio';
+
+/**
+ * Para qué es un gasto, según la regla 50/20/30: lo que necesitas sí o sí, lo que podrías dejar,
+ * lo que guardas, o el pago de una deuda (que se mide aparte, contra el tope de endeudamiento).
+ */
+export type Clase = 'basico' | 'lujo' | 'ahorro' | 'deuda';
 
 export type TipoCategoria = 'gasto' | 'ingreso';
 
@@ -11,6 +17,7 @@ export interface Categoria {
   tipo: TipoCategoria;
   color: string; // token "c1".."c10" (cambia con el tema) o un color CSS
   orden: number;
+  clase?: Clase; // solo en categorías de gasto: el tipo que toman sus gastos si no se les pone otro
 }
 
 export interface Ingreso {
@@ -49,6 +56,7 @@ export interface Gasto {
   categoria: string;
   monto: number;
   frecuencia: Frecuencia;
+  clase?: Clase; // vacío = la de su categoría
   meses?: Mes[]; // solo se paga en esos meses, completo cada vez; vacío = todos los meses
   recortable?: boolean;
   nota?: string;
@@ -67,6 +75,21 @@ export interface CompraMSI {
   plazoTotal: number;
   inicio: Mes; // mes del primer pago
   reparto?: Reparto;
+}
+
+export type Capitalizacion = 'diaria' | 'mensual' | 'anual';
+
+/** Dinero invertido que paga un rendimiento. Lo que rinde al mes puede contar como ingreso. */
+export interface Inversion {
+  id: string;
+  nombre: string;
+  monto: number; // el saldo en el mes `desde`
+  desde?: Mes; // mes en que se capturó ese saldo; a partir de ahí crece solo si el rendimiento se reinvierte
+  tasa: number; // rendimiento anual, en %
+  capitalizacion: Capitalizacion; // cada cuánto se calcula el interés
+  comoIngreso?: boolean; // el rendimiento se retira cada mes y cuenta como ingreso; si no, se reinvierte
+  privadaDe?: string; // id del único miembro del hogar que la ve; vacío = compartida
+  reparto?: Reparto; // de quién es, si es compartida
 }
 
 export interface PagoMarcado {
@@ -94,6 +117,7 @@ export interface Datos {
   ingresos: Ingreso[];
   gastos: Gasto[];
   msi: CompraMSI[];
+  inversiones?: Inversion[]; // las compartidas y las privadas de quien consulta
   pagos: PagoMarcado[];
   ciclos: CicloEscolar[];
   sinClases: SinClases[];
@@ -104,7 +128,7 @@ export interface Estado extends Datos {
   hoy: string; // fecha del servidor, "YYYY-MM-DD"
 }
 
-export type Coleccion = 'categorias' | 'ingresos' | 'gastos' | 'msi' | 'ciclos' | 'sinClases';
+export type Coleccion = 'categorias' | 'ingresos' | 'gastos' | 'msi' | 'inversiones' | 'ciclos' | 'sinClases';
 
 export type Rol = 'admin' | 'usuario';
 

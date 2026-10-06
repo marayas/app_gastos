@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Coleccion, Datos, Sesion, Tema, Usuario } from '../shared/tipos.ts';
+import type { Categoria, Coleccion, Datos, Sesion, Tema, Usuario } from '../shared/tipos.ts';
 import { Acceso } from './Acceso.tsx';
 import { Config, aplicarTema, cambiaDeModo, modoVisible, TEMA_INICIAL } from './Config.tsx';
 import { Cuenta } from './Cuenta.tsx';
@@ -101,7 +101,7 @@ function Panel({ usuario, onSalir, tema, onTema }: PanelProps) {
 
   const mes = (HOY_SIMULADO ?? estado.hoy).slice(0, 7);
   const abrir = (col: Coleccion, item: Item | null, base?: Record<string, unknown>) => setEdicion({ col, item, base });
-  const form = edicion && formulario(edicion.col, estado.categorias, mes, (edicion.item as Record<string, unknown> | null) ?? edicion.base ?? null, { miembros: estado.miembros ?? [], yo: usuario.id });
+  const form = edicion && formulario(edicion.col, estado.categorias, mes, (edicion.item as Record<string, unknown> | null) ?? edicion.base ?? null, { miembros: estado.miembros ?? [], yo: usuario.id }, estado);
 
   async function guardarEdicion(v: Valores) {
     if (!edicion || !form) return;
@@ -114,6 +114,11 @@ function Panel({ usuario, onSalir, tema, onTema }: PanelProps) {
       const nombre = String(v.categoriaNueva ?? '').trim();
       const existente = deTipo(estado!.categorias, tipo).find((c) => c.nombre.toLowerCase() === nombre.toLowerCase());
       const categoria = existente ?? nuevaCategoria(estado!.categorias, tipo, nombre);
+      // Una categoría de gasto recién creada toma el tipo elegido para este gasto, que entonces ya no necesita el suyo.
+      if (!existente && tipo === 'gasto') {
+        categoria.clase = (item.clase as Categoria['clase']) ?? 'basico';
+        delete item.clase;
+      }
       if (!existente) await store.guardar('categorias', categoria);
       item.categoria = categoria.id;
     }

@@ -1,6 +1,6 @@
 import { diasConClases, gastoDelMes, rangoMeses } from '../shared/calc.ts';
 import type { Coleccion, Datos, Mes, TipoCategoria } from '../shared/tipos.ts';
-import { deTipo, nuevaCategoria } from './formularios.ts';
+import { CLASES, deTipo, nuevaCategoria } from './formularios.ts';
 import type { Item, Store } from './store.ts';
 import { colorDe, fechaLarga, fmt, mesLargo } from './ui.ts';
 
@@ -39,7 +39,7 @@ export function DatosTab({ real, mes, store, abrir }: Props) {
       {deTipo(real.categorias, tipo).map((c) => (
         <div key={c.id} className="lrow">
           <span className="dot" style={{ background: colorDe(c) }} />
-          <span className="pn grow">{c.nombre}<small>{enUso(c.id) ? `En uso: ${enUso(c.id)}` : 'Sin usar'}</small></span>
+          <span className="pn grow">{c.nombre}<small>{tipo === 'gasto' && `${CLASES.find(([k]) => k === (c.clase ?? 'basico'))?.[1]} · `}{enUso(c.id) ? `En uso: ${enUso(c.id)}` : 'Sin usar'}</small></span>
           <button className="icon" aria-label={`Editar ${c.nombre}`} onClick={() => abrir('categorias', c)}>✎</button>
         </div>
       ))}
@@ -52,6 +52,7 @@ export function DatosTab({ real, mes, store, abrir }: Props) {
         <h2>Categorías</h2>
         <p className="note first">
           También puedes crear una categoría al capturar un ingreso o un gasto, con «+ Nueva categoría…». Solo se pueden borrar las que no están en uso.
+          Cada categoría de gasto dice si sus gastos son básicos, lujos, ahorro o deuda, para la regla 50/20/30 del Resumen.
         </p>
         {listaCategorias('ingreso', 'De ingresos')}
         {listaCategorias('gasto', 'De gastos')}

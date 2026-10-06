@@ -1,11 +1,14 @@
-import { diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, msiRestanteTotal, pagosRestantes, proyeccion, rangoMeses, resumen, resumenPorPersona } from '../shared/calc.ts';
-import type { Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
-import { deTipo, FRECUENCIAS } from './formularios.ts';
+import {
+  CATEGORIA_INVERSIONES, claseDeGasto, diasConClases, finMSI, gastoDelMes, gastoTerminado, ingresoVigente, META, msiRestanteTotal, pagosRestantes,
+  proyeccion, rangoMeses, regla, rendimientoMensual, resumen, resumenPorPersona, saldoInversion, tasaEfectivaAnual, TOPE_DEUDA, totalInversiones,
+} from '../shared/calc.ts';
+import type { Clase, Coleccion, Datos, Frecuencia, Gasto, Ingreso, Mes, Reparto } from '../shared/tipos.ts';
+import { CAPITALIZACIONES, CLASES, deTipo, FRECUENCIAS } from './formularios.ts';
 import { Columnas, Ranking } from './Graficas.tsx';
 import { Icono } from './Icono.tsx';
 import { MontoInput } from './MontoInput.tsx';
 import type { Item, Store } from './store.ts';
-import { COLOR_MSI, colorDe, fmt, mesLargo, pct, textoMeses, textoReparto, textoSplit, usePref } from './ui.ts';
+import { COLOR_MSI, colorDe, fmt, mesCorto, mesLargo, pct, textoMeses, textoReparto, textoSplit, usePref } from './ui.ts';
 
 interface Props {
   real: Datos; // datos guardados
@@ -33,6 +36,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
   // Fuentes de ingreso con monto en el periodo, de mayor a menor; los ingresos sin categoría van aparte.
   const fuentes = [
     ...deTipo(real.categorias, 'ingreso').map((c) => ({ id: c.id, nombre: c.nombre, color: colorDe(c), total: r.ingresosPorCategoria[c.id] ?? 0 })),
+    { id: CATEGORIA_INVERSIONES, nombre: 'Rendimiento de inversiones', color: COLOR_MSI, total: r.ingresosPorCategoria[CATEGORIA_INVERSIONES] ?? 0 },
     { id: '', nombre: 'Sin categoría', color: 'var(--mute)', total: r.ingresosPorCategoria[''] ?? 0 },
   ].filter((f) => f.total > 0).sort((a, b) => b.total - a.total);
   const gruposIngreso = [
@@ -45,6 +49,9 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
   // Los gastos de ciertos meses dejan de listarse cuando ya pasaron todos sus meses.
   const gastos = real.gastos.filter((g) => !gastoTerminado(g, mes));
   const recortables = gastos.filter((g) => g.recortable);
+  const inversiones = real.inversiones ?? [];
+  const invertido = totalInversiones(real, mes);
+  const rindenAlMes = inversiones.reduce((s, x) => s + rendimientoMensual(x, mes), 0);
   const sobranteReal = resumen(real, mes, periodo).sobrante;
   const alternar = (id: string) =>
     setExcluidos(excluidos.includes(id) ? excluidos.filter((x) => x !== id) : [...excluidos, id]);
@@ -54,6 +61,17 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
   const usado = r.ingresos ? r.egresos / r.ingresos : 0;
   const personas = resumenPorPersona(datos, mes, periodo);
   const reparto = (x: { reparto?: Reparto }) => textoReparto(x.reparto, real.miembros);
+  // Ingresos del periodo sin dueño: se reparten a partes iguales, lo que casi nunca es cierto para un sueldo.
+  const sinDuenio = real.ingresos.filter((x) => !x.reparto && meses.some((m) => ingresoVigente(x, m)));
+  const rg = regla(datos, mes, periodo);
+  const cuando = anual ? 'al año' : 'al mes';
+  // Básicos, lujos y deudas tienen un máximo; el ahorro, un mínimo.
+  const grupos = [
+    { id: 'basico', nombre: 'Básicos', total: rg.basico, meta: META.basico, minimo: false, que: 'Lo que necesitas sí o sí para vivir.' },
+    { id: 'lujo', nombre: 'Lujos', total: rg.lujo, meta: META.lujo, minimo: false, que: 'Lo que podrías dejar sin que falte lo esencial.' },
+    { id: 'ahorro', nombre: 'Ahorro', total: rg.ahorro, meta: META.ahorro, minimo: true, que: 'Lo que guardas o inviertes.' },
+    { id: 'deuda', nombre: 'Deudas', total: rg.deuda, meta: TOPE_DEUDA, minimo: false, que: 'Meses sin intereses y créditos. Se miden aparte.' },
+  ];
 
   return (
     <>
@@ -66,6 +84,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
           <button className="add" onClick={() => abrir('ingresos', null)}><Icono n="mas" s={16} />Ingreso</button>
           <button className="add" onClick={() => abrir('gastos', null)}><Icono n="mas" s={16} />Gasto</button>
           <button className="add" onClick={() => abrir('msi', null)}><Icono n="mas" s={16} />MSI</button>
+          <button className="add" onClick={() => abrir('inversiones', null)}><Icono n="mas" s={16} />Inversión</button>
         </span>
       </div>
 
@@ -120,6 +139,46 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
         )}
       </section>
 
+      {rg.ingresoFijo > 0 && (
+        <section className="panel">
+          <h2>Regla 50/20/30</h2>
+          <p className="note first">
+            Qué parte de tu ingreso fijo ({fmt(rg.ingresoFijo)} {cuando}, sin bonos ni aguinaldo) se va a cada cosa. La guía: hasta {META.basico}% en básicos,
+            hasta {META.lujo}% en lujos y al menos {META.ahorro}% en ahorro. Las deudas no entran en esos tres: su tope sano es {TOPE_DEUDA}%.
+          </p>
+          <div className="personas">
+            {grupos.map((g) => {
+              const p = (g.total / rg.ingresoFijo) * 100;
+              const objetivo = (rg.ingresoFijo * g.meta) / 100;
+              const bien = g.minimo ? p >= g.meta : p <= g.meta;
+              const dif = Math.abs(g.total - objetivo);
+              return (
+                <div key={g.id} className="persona meta">
+                  <h3>{g.nombre}</h3>
+                  <p className={'metanum' + (bien ? '' : ' neg')}>{Math.round(p)}%<small>{g.minimo ? 'meta: al menos' : g.id === 'deuda' ? 'tope:' : 'meta: hasta'} {g.meta}%</small></p>
+                  <div className="conmeta" role="img" aria-label={`${g.nombre}: ${Math.round(p)}% del ingreso fijo; la guía es ${g.meta}%`}>
+                    <span className="track"><i className="grow" style={{ width: `${Math.min(p, 100)}%`, background: bien ? 'var(--in)' : 'var(--neg)' }} /></span>
+                    <span className="marca" style={{ left: `${g.meta}%` }} />
+                  </div>
+                  <p className="note">
+                    <b>{fmt(g.total)}</b> {cuando}.{' '}
+                    {g.id === 'deuda'
+                      ? bien
+                        ? <>Te cabe otra mensualidad de hasta <b>{fmt(Math.max(rg.margenDeuda, 0))}</b> al mes.</>
+                        : <>Te pasas del tope por <b className="neg">{fmt(dif)}</b>; no conviene sumar otra mensualidad.</>
+                      : g.minimo
+                        ? bien ? <>Cumples la meta, con {fmt(dif)} de más.</> : <>Te faltan <b className="neg">{fmt(dif)}</b> para la meta.</>
+                        : bien ? <>Te quedan {fmt(dif)} antes del límite.</> : <>Te pasas por <b className="neg">{fmt(dif)}</b>.</>}
+                  </p>
+                  <p className="note metaque">{g.que}</p>
+                </div>
+              );
+            })}
+          </div>
+          <p className="note">Cada gasto toma el tipo de su categoría (se cambia en Datos → Categorías); en la tabla de Detalle puedes ponerle otro a un gasto en particular. {datos !== real && 'Incluye el escenario de recortes activo.'}</p>
+        </section>
+      )}
+
       {personas.length > 1 && (
         <section className="panel">
           <h2>Por persona</h2>
@@ -139,6 +198,15 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
               </div>
             ))}
           </div>
+          {sinDuenio.length > 0 && (
+            <p className="note">
+              Estos ingresos no dicen de quién son y por eso se reparten en partes iguales:{' '}
+              {sinDuenio.map((x, i) => (
+                <span key={x.id}>{i > 0 && ', '}<button className="link" onClick={() => abrir('ingresos', x)}>{x.nombre}</button> ({fmt(x.monto)})</span>
+              ))}
+              . Toca uno y elige en «¿De quién es?» para que cuente solo para esa persona.
+            </p>
+          )}
         </section>
       )}
 
@@ -152,6 +220,19 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
               <Ranking partes={fuentes} base={r.ingresos} tono="in" />
             )}
           </section>
+
+          {inversiones.length > 0 && (
+            <section className="panel">
+              <h2>Inversiones</h2>
+              <div className="lrow"><span className="pn">Compartido<small>Lo que ve todo el hogar</small></span><b className="amt">{fmt(invertido.compartido)}</b></div>
+              <div className="lrow"><span className="pn">Personal<small>Tus inversiones privadas; solo tú las ves</small></span><b className="amt">{fmt(invertido.personal)}</b></div>
+              <div className="psub"><span>Total</span><b className="amt">{fmt(invertido.compartido + invertido.personal)}</b></div>
+              <p className="note">
+                Saldos estimados a {mesLargo(mes)}; rinden alrededor de <b>{fmt(rindenAlMes)}</b> al mes. Lo que se reinvierte hace crecer el saldo solo:
+                si no coincide con tu estado de cuenta, corrígelo en la tabla de Detalle.
+              </p>
+            </section>
+          )}
 
           <section className="panel">
             <h2>Escenarios</h2>
@@ -194,12 +275,13 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                 <th>Concepto</th>
                 <th className="r">Monto</th>
                 <th>Frecuencia</th>
+                <th>Tipo</th>
                 <th className="r">{anual ? 'Al año' : 'Al mes'}</th>
               </tr>
             </thead>
             <tbody>
               <tr className="catrow">
-                <td colSpan={3}><span className="tag" style={{ background: 'var(--in)' }} />Ingresos</td>
+                <td colSpan={4}><span className="tag" style={{ background: 'var(--in)' }} />Ingresos</td>
                 <td className="r">{fmt(r.ingresos)}</td>
               </tr>
               {gruposIngreso.map((g) => (
@@ -214,11 +296,38 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                         <MontoInput valor={x.monto} etiqueta={x.nombre} onChange={(monto) => store.guardar('ingresos', { ...x, monto }, true)} />
                       </td>
                       <td>{vigencia(x)}</td>
+                      <td />
                       <td className="r">{fmt(meses.reduce((s, m) => s + (ingresoVigente(x, m) ? x.monto : 0), 0))}</td>
                     </tr>
                   ))}
                 </Categoria>
               ))}
+              {inversiones.length > 0 && (
+                <Categoria nombre="Inversiones" color={COLOR_MSI} total={r.ingresosPorCategoria[CATEGORIA_INVERSIONES] ?? 0} sub>
+                  {inversiones.map((x) => (
+                    <tr key={x.id}>
+                      <td>
+                        <button className="link" onClick={() => abrir('inversiones', x)}>{x.nombre}</button>
+                        {x.privadaDe && <span className="flag">privada</span>}
+                        <small>
+                          Rinde {fmt(rendimientoMensual(x, mes))} al mes{!x.comoIngreso && ', que se reinvierte'}
+                          {!x.privadaDe && reparto(x) ? ` · ${reparto(x)}` : ''}
+                        </small>
+                      </td>
+                      <td className="r">
+                        <MontoInput valor={saldoInversion(x, mes)} etiqueta={`Saldo de ${x.nombre}`} onChange={(monto) => store.guardar('inversiones', { ...x, monto, desde: mes }, true)} />
+                        {!x.comoIngreso && x.desde && x.desde !== mes && <small>estimado; {fmt(x.monto)} en {mesCorto(x.desde)}</small>}
+                      </td>
+                      <td>
+                        {x.tasa}% anual
+                        <small>interés {CAPITALIZACIONES.find(([k]) => k === x.capitalizacion)?.[1].toLowerCase()} · {(tasaEfectivaAnual(x) * 100).toFixed(2)}% efectivo</small>
+                      </td>
+                      <td />
+                      <td className="r">{x.comoIngreso ? fmt(rendimientoMensual(x, mes) * meses.length) : '—'}</td>
+                    </tr>
+                  ))}
+                </Categoria>
+              )}
               {categoriasGasto.map((c) => (
                 <Categoria key={c.id} nombre={c.nombre} color={colorDe(c)} total={r.porCategoria[c.id] ?? 0}>
                   {gastos.filter((g) => g.categoria === c.id).map((g) => {
@@ -257,6 +366,15 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                             </select>
                           )}
                         </td>
+                        <td>
+                          <select
+                            aria-label={`Tipo de ${g.nombre}`}
+                            value={claseDeGasto(real, g)}
+                            onChange={(e) => store.guardar('gastos', { ...g, clase: e.target.value as Clase })}
+                          >
+                            {CLASES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                          </select>
+                        </td>
                         <td className="r">{fmt(totalGasto(g))}</td>
                       </tr>
                     );
@@ -274,6 +392,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
                       </td>
                       <td className="r">{fmt(c.pagoMensual)}</td>
                       <td>{k} de {c.plazoTotal} {k === 1 ? 'pago restante' : 'pagos restantes'}<small>termina en {mesLargo(finMSI(c))}</small></td>
+                      <td>Deuda</td>
                       <td className="r">{fmt(anual ? c.pagoMensual * k : c.inicio <= mes ? c.pagoMensual : 0)}</td>
                     </tr>
                   );
@@ -283,7 +402,7 @@ export function Resumen({ real, datos, mes, excluidos, setExcluidos, store, abri
           </table>
         </div>
         <p className="note">
-          Toca un concepto para editarlo o borrarlo. Los montos y frecuencias se guardan solos al cambiarlos.
+          Toca un concepto para editarlo o borrarlo. Los montos, frecuencias y tipos se guardan solos al cambiarlos.
           {anual && ' La vista anual suma los próximos 12 meses; en MSI muestra lo que falta pagar en total.'}
         </p>
       </section>
@@ -308,7 +427,7 @@ function Categoria({ nombre, color, total, sub, children }: CategoriaProps) {
   return (
     <>
       <tr className={'catrow' + (sub ? ' subcat' : '')}>
-        <td colSpan={3}><span className="tag" style={{ background: color }} />{nombre}</td>
+        <td colSpan={4}><span className="tag" style={{ background: color }} />{nombre}</td>
         <td className="r">{fmt(total)}</td>
       </tr>
       {children}

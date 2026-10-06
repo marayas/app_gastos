@@ -9,8 +9,13 @@ import {
   msiRestanteTotal,
   pagosRestantes,
   proyeccion,
+  regla,
+  rendimientoMensual,
   resumen,
+  saldoInversion,
+  totalInversiones,
   sumarMeses,
+  tasaEfectivaAnual,
   ultimoMesMSI,
   repartir,
   resumenPorPersona,
@@ -80,6 +85,89 @@ describe('gastos de ciertos meses', () => {
     const miembros = [{ id: 'm', nombre: 'Marco' }, { id: 'a', nombre: 'Ana' }];
     const hogar = { ...d, miembros, gastos: [{ ...unico, reparto: { tipo: 'monto', de: 'a', valor: 1000 } as const }] };
     expect(resumenPorPersona(hogar, '2026-10', 'anio').map((p) => p.egresos - resumenPorPersona({ ...hogar, gastos: [] }, '2026-10', 'anio').find((q) => q.persona.id === p.persona.id)!.egresos)).toEqual([2000, 1000]);
+  });
+});
+
+describe('inversiones', () => {
+  const base = { id: 'i', nombre: 'Cetes', monto: 100000, tasa: 12 };
+  it('rinde más al año entre más seguido se calcula el interés', () => {
+    expect(tasaEfectivaAnual({ ...base, capitalizacion: 'anual' })).toBeCloseTo(0.12, 6);
+    expect(tasaEfectivaAnual({ ...base, capitalizacion: 'mensual' })).toBeCloseTo(0.126825, 6);
+    expect(tasaEfectivaAnual({ ...base, capitalizacion: 'diaria' })).toBeCloseTo(0.127475, 5);
+  });
+  it('el rendimiento mensual, compuesto doce veces, da la tasa efectiva anual', () => {
+    expect(rendimientoMensual({ ...base, capitalizacion: 'mensual' })).toBeCloseTo(1000, 6); // 1 % al mes
+    const anual = rendimientoMensual({ ...base, capitalizacion: 'anual' });
+    expect(100000 * ((1 + anual / 100000) ** 12 - 1)).toBeCloseTo(12000, 4);
+  });
+  it('si se reinvierte, el saldo crece solo desde el mes en que se capturó', () => {
+    const x = { ...base, capitalizacion: 'anual' as const, desde: '2026-10' };
+    expect(saldoInversion(x, '2026-10')).toBe(100000);
+    expect(saldoInversion(x, '2027-10')).toBeCloseTo(112000, 4);
+    expect(saldoInversion(x, '2028-10')).toBeCloseTo(125440, 4);
+    expect(saldoInversion(x, '2026-08')).toBe(100000); // antes de capturarlo no se adivina
+    expect(rendimientoMensual(x, '2027-10')).toBeCloseTo(rendimientoMensual(x) * 1.12, 6);
+    expect(saldoInversion({ ...x, comoIngreso: true }, '2028-10')).toBe(100000); // si se retira, no crece
+  });
+  it('separa el total compartido del personal', () => {
+    const inversiones = [
+      { ...base, capitalizacion: 'anual' as const, desde: '2026-10' },
+      { ...base, id: 'p', monto: 40000, capitalizacion: 'anual' as const, desde: '2026-10', privadaDe: 'm' },
+    ];
+    expect(totalInversiones({ ...d, inversiones }, '2026-10')).toEqual({ compartido: 100000, personal: 40000 });
+    const enUnAnio = totalInversiones({ ...d, inversiones }, '2027-10');
+    expect([enUnAnio.compartido, enUnAnio.personal]).toEqual([expect.closeTo(112000, 4), expect.closeTo(44800, 4)]);
+  });
+  it('solo suma a los ingresos si así se marcó, y entra al ingreso fijo', () => {
+    const con = (comoIngreso: boolean) => ({ ...d, inversiones: [{ ...base, capitalizacion: 'mensual' as const, comoIngreso }] });
+    expect(resumen(con(false), '2026-10', 'mes').ingresos).toBe(75000);
+    expect(resumen(con(true), '2026-10', 'mes').ingresos).toBeCloseTo(76000, 6);
+    expect(resumen(con(true), '2026-10', 'mes').ingresosPorCategoria.inversiones).toBeCloseTo(1000, 6);
+    expect(regla(con(true), '2026-10', 'mes').ingresoFijo).toBeCloseTo(76000, 6);
+  });
+  it('una privada es ingreso solo de su dueño', () => {
+    const miembros = [{ id: 'm', nombre: 'Marco' }, { id: 'a', nombre: 'Ana' }];
+    const hogar = { ...d, miembros, inversiones: [{ ...base, capitalizacion: 'mensual' as const, comoIngreso: true, privadaDe: 'a' }] };
+    const sin = resumenPorPersona({ ...hogar, inversiones: [] }, '2026-10', 'mes');
+    const con = resumenPorPersona(hogar, '2026-10', 'mes');
+    expect([con[0].ingresos - sin[0].ingresos, con[1].ingresos - sin[1].ingresos]).toEqual([0, 1000].map((v) => expect.closeTo(v, 6)));
+  });
+});
+
+describe('frecuencia trimestral', () => {
+  it('cuenta un tercio cada mes', () => {
+    expect(gastoDelMes(d, { id: 't', nombre: 'Agua', categoria: 'casa', monto: 900, frecuencia: 'trimestre' }, '2026-10')).toBe(300);
+  });
+});
+
+describe('regla 50/20/30 y endeudamiento', () => {
+  it('el gasto toma la clase de su categoría, y las deudas van aparte', () => {
+    const r = regla(d, '2026-10', 'mes');
+    expect(r.ingresoFijo).toBe(75000);
+    expect(r.lujo).toBeCloseTo(2000 + 199.5, 2); // café (personal) y streaming (suscripciones)
+    expect(r.ahorro).toBe(10000);
+    expect(r.basico + r.lujo + r.ahorro).toBeCloseTo(FIJOS + 960, 2); // todos los gastos del mes
+    expect(r.deuda).toBe(4500.5); // solo MSI
+    expect(r.margenDeuda).toBeCloseTo(75000 * 0.3 - 4500.5, 2);
+  });
+  it('cambiar la clase de la categoría mueve sus gastos, salvo los que tienen la suya', () => {
+    const categorias = d.categorias.map((c) => (c.id === 'auto' ? { ...c, clase: 'deuda' as const } : c));
+    const gastos = d.gastos.map((g) => (g.id === 'seguro' ? { ...g, clase: 'basico' as const } : g));
+    expect(regla({ ...d, categorias, gastos }, '2026-10', 'mes').deuda).toBe(4500.5 + 6000); // el carro sí, el seguro no
+    expect(regla({ ...d, categorias: d.categorias.map(({ clase: _c, ...c }) => c) }, '2026-10', 'mes').lujo).toBe(0); // sin clase = básico
+  });
+  it('la clase puesta a mano manda, y una deuda sale de los básicos', () => {
+    const con = { ...d, gastos: d.gastos.map((g) => (g.id === 'carro' ? { ...g, clase: 'deuda' as const } : g.id === 'cafe' ? { ...g, clase: 'basico' as const } : g)) };
+    const a = regla(d, '2026-10', 'mes');
+    const b = regla(con, '2026-10', 'mes');
+    expect(b.deuda).toBe(4500.5 + 6000);
+    expect(b.basico).toBeCloseTo(a.basico - 6000 + 2000, 2);
+    expect(b.lujo).toBeCloseTo(199.5, 2);
+  });
+  it('el ingreso fijo no cuenta los ingresos de una sola vez', () => {
+    const con = { ...d, ingresos: [...d.ingresos, { id: 'ag', nombre: 'Aguinaldo', monto: 30000, desde: '2026-12', hasta: '2026-12' }] };
+    expect(regla(con, '2026-12', 'mes').ingresoFijo).toBe(regla(d, '2026-12', 'mes').ingresoFijo);
+    expect(resumen(con, '2026-12', 'mes').ingresos).toBe(resumen(d, '2026-12', 'mes').ingresos + 30000);
   });
 });
 

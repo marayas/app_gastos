@@ -1,5 +1,5 @@
-import { pagosRestantes, parteDeSplit, rangoMeses, repartir, sumarMeses } from '../shared/calc.ts';
-import type { Categoria, Coleccion, CompraMSI, Gasto, Ingreso, Mes, Persona, Reparto, Split, TipoCategoria } from '../shared/tipos.ts';
+import { pagosRestantes, parteDeSplit, rangoMeses, regla, rendimientoMensual, repartir, saldoInversion, sumarMeses, tasaEfectivaAnual, TOPE_DEUDA } from '../shared/calc.ts';
+import type { Capitalizacion, Categoria, Coleccion, CompraMSI, Datos, Gasto, Ingreso, Inversion, Mes, Persona, Reparto, Split, TipoCategoria } from '../shared/tipos.ts';
 import { fmt, mesCorto, nuevoId } from './ui.ts';
 
 export type Valor = string | boolean | number[] | string[];
@@ -33,7 +33,31 @@ export interface Formulario {
 export const FRECUENCIAS: [string, string][] = [
   ['mes', 'por mes'],
   ['bimestre', 'por bimestre'],
+  ['trimestre', 'por trimestre'],
   ['anio', 'por año'],
+];
+
+export const CLASES: [string, string][] = [
+  ['basico', 'Básico'],
+  ['lujo', 'Lujo'],
+  ['ahorro', 'Ahorro'],
+  ['deuda', 'Deuda'],
+];
+
+const CLASES_LARGAS: [string, string][] = [
+  ['basico', 'Básico: lo necesitas sí o sí'],
+  ['lujo', 'Lujo: podrías vivir sin él'],
+  ['ahorro', 'Ahorro o inversión'],
+  ['deuda', 'Deuda o crédito'],
+];
+
+/** En el formulario de gasto: no se le pone clase propia y toma la de su categoría. */
+export const DE_CATEGORIA = 'categoria';
+
+export const CAPITALIZACIONES: [string, string][] = [
+  ['diaria', 'Cada día'],
+  ['mensual', 'Cada mes'],
+  ['anual', 'Una vez al año'],
 ];
 
 export const PARTES_SPLIT: [string, string][] = [
@@ -172,7 +196,7 @@ function categoriaInicial(categorias: Categoria[], tipo: TipoCategoria, actual?:
 }
 
 /** `origen` es el elemento que se edita o, al crear, sus valores iniciales. */
-export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, origen: Record<string, unknown> | null, hogar: Hogar = { miembros: [] }): Formulario {
+export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, origen: Record<string, unknown> | null, hogar: Hogar = { miembros: [] }, datos?: Datos): Formulario {
   switch (col) {
     case 'ingresos': {
       const campos: Campo[] = [
@@ -223,10 +247,16 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           if (!(pago > 0) || !(plazo >= 1)) return null;
           const restantes = Number(v.restantes);
           const partes = notaReparto(v, pago, hogar);
+          // Nivel de endeudamiento con esta compra en lugar de la que se está editando.
+          const r = datos && regla({ ...datos, msi: datos.msi.filter((c) => c.id !== compra?.id) }, mes, 'mes');
+          const deuda = r && r.ingresoFijo > 0 ? ((r.deuda + pago) / r.ingresoFijo) * 100 : null;
           return (
             `Total de la compra: ${fmt(pago * plazo)}` +
             (restantes >= 1 && restantes <= plazo ? ` · faltan ${fmt(pago * restantes)}` : '') +
-            (partes ? ` · cada mes: ${partes}` : '')
+            (partes ? ` · cada mes: ${partes}` : '') +
+            (deuda === null ? '' : deuda > TOPE_DEUDA
+              ? ` · Ojo: con esta compra tus deudas llegan a ${Math.round(deuda)}% de tu ingreso fijo; el tope sano es ${TOPE_DEUDA}%.`
+              : ` · con esta compra tus deudas quedan en ${Math.round(deuda)}% de tu ingreso fijo (tope ${TOPE_DEUDA}%)`)
           );
         },
         aForm: (item) => aForm(campos, { ...(item && { ...item, restantes: restantesAhora }), ...repartoAForm(compra?.reparto, hogar) }),
@@ -235,6 +265,45 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           // Sin cambios en plazo ni restantes se conserva el inicio (importa en compras que aún no empiezan).
           if (compra && restantes === restantesAhora && c.plazoTotal === compra.plazoTotal) return { ...c, inicio: compra.inicio };
           return { ...c, inicio: sumarMeses(mes, (restantes as number) - (c.plazoTotal as number)) };
+        },
+      };
+    }
+    case 'inversiones': {
+      const compartida = (v: Valores) => v.privada !== true;
+      const campos: Campo[] = [
+        { k: 'nombre', etiqueta: 'Nombre', tipo: 'texto' },
+        { k: 'monto', etiqueta: 'Saldo actual', tipo: 'numero', ayuda: 'Lo que tienes invertido hoy. Si después no coincide con lo que dice tu inversión, corrígelo aquí.' },
+        { k: 'tasa', etiqueta: 'Rendimiento anual (%)', tipo: 'numero', max: 1000, ayuda: 'La tasa anual que anuncia la inversión, por ejemplo 10.5.' },
+        {
+          k: 'capitalizacion', etiqueta: 'El interés se calcula', tipo: 'select', opciones: CAPITALIZACIONES,
+          ayuda: 'Entre más seguido se calcula, un poco más rinde al año con la misma tasa.',
+        },
+        { k: 'comoIngreso', etiqueta: 'Retiro el rendimiento cada mes (se suma a mis ingresos). Sin marcar, se reinvierte y el saldo crece solo', tipo: 'check' },
+        { k: 'privada', etiqueta: 'Privada: solo yo la veo, aunque comparta mi hogar', tipo: 'check' },
+        ...camposReparto(hogar, '¿De quién es?').map((c): Campo => ({ ...c, si: (v) => compartida(v) && (c.si?.(v) ?? true) })),
+      ];
+      const inv = origen as Inversion | null;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const saldoAhora = inv?.id ? r2(saldoInversion(inv, mes)) : null;
+      return {
+        titulo: 'inversión',
+        campos,
+        nota(v) {
+          const x = { monto: Number(v.monto), tasa: Number(v.tasa), capitalizacion: v.capitalizacion as Capitalizacion };
+          if (!(x.monto > 0) || !(x.tasa > 0)) return null;
+          const alMes = rendimientoMensual(x as Inversion);
+          const destino = v.comoIngreso === true ? 'se suma a tus ingresos' : `en un año el saldo llegaría a ${fmt(x.monto * (1 + tasaEfectivaAnual(x)))}`;
+          return `Rinde alrededor de ${fmt(alMes)} al mes y ${fmt(x.monto * tasaEfectivaAnual(x))} al año (${(tasaEfectivaAnual(x) * 100).toFixed(2)}% efectivo); ${destino}`;
+        },
+        aForm: (item) => aForm(campos, { capitalizacion: 'diaria', ...item, ...(saldoAhora !== null && { monto: saldoAhora }), privada: !!inv?.privadaDe, ...repartoAForm(inv?.privadaDe ? undefined : inv?.reparto, hogar) }),
+        deForm(v, id) {
+          const { privada, ...y } = conReparto(deForm(campos, v, id), v, origen);
+          // Si no se tocó el saldo se conserva el capturado y su mes; si se corrigió, el nuevo cuenta desde este mes.
+          const x: Record<string, unknown> & { id: string } =
+            inv?.id && y.monto === saldoAhora ? { ...y, monto: inv.monto, desde: inv.desde ?? mes } : { ...y, desde: mes };
+          if (!privada) return x;
+          const { reparto: _reparto, ...sola } = x;
+          return { ...sola, privadaDe: hogar.yo };
         },
       };
     }
@@ -251,15 +320,22 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
         { k: 'hasta', etiqueta: 'Hasta', tipo: 'fecha', ayuda: 'Para un solo día, usa la misma fecha.' },
       ]);
     case 'categorias': {
+      const cat = origen as Partial<Categoria> | null;
+      const deGasto = cat?.tipo !== 'ingreso';
       const campos: Campo[] = [
         { k: 'nombre', etiqueta: 'Nombre', tipo: 'texto' },
         { k: 'color', etiqueta: 'Color', tipo: 'select', opciones: COLORES },
+        ...(deGasto
+          ? [{
+              k: 'clase', etiqueta: 'Sus gastos son', tipo: 'select' as const, opciones: CLASES_LARGAS,
+              ayuda: 'Para la regla 50/20/30. Aplica a los gastos de esta categoría que no tengan su propio tipo.',
+            }]
+          : []),
       ];
-      const cat = origen as Partial<Categoria> | null;
       return {
         titulo: cat?.tipo === 'ingreso' ? 'categoría de ingreso' : 'categoría de gasto',
         campos,
-        aForm: () => aForm(campos, origen ?? {}),
+        aForm: () => aForm(campos, { ...(deGasto && { clase: 'basico' }), ...origen }),
         // El tipo y el orden no se editan: se conservan los del origen.
         deForm: (v, id) => ({ ...deForm(campos, v, id), tipo: cat?.tipo ?? 'gasto', orden: cat?.orden ?? 0 }),
       };
@@ -275,6 +351,11 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
         { k: 'nombre', etiqueta: 'Concepto', tipo: 'texto' },
         campoCategoria(categorias, 'gasto'),
         { k: 'monto', etiqueta: 'Monto', tipo: 'numero' },
+        {
+          k: 'clase', etiqueta: 'Tipo de gasto', tipo: 'select',
+          opciones: [[DE_CATEGORIA, 'El de su categoría'], ...CLASES_LARGAS],
+          ayuda: 'Para la regla 50/20/30 del Resumen. Cada categoría tiene su tipo (se cambia en Datos); aquí puedes ponerle otro solo a este gasto.',
+        },
         { k: 'porMeses', etiqueta: 'Solo se paga en ciertos meses (no se repite cada mes)', tipo: 'check', si: () => !porDia },
         {
           k: 'meses', etiqueta: '¿En qué meses se paga?', tipo: 'meses', opciones: elegibles.map((m) => [m, mesCorto(m)]),
@@ -314,6 +395,7 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
             frecuencia: 'mes',
             ...g,
             categoria: categoriaInicial(categorias, 'gasto', g?.categoria),
+            clase: g?.clase ?? DE_CATEGORIA,
             monto: g?.porDia ? g.porDia.tarifa : g?.monto,
             porMeses: !!g?.meses?.length,
             meses: g?.meses?.length ? g.meses : [mes],
@@ -326,10 +408,11 @@ export function formulario(col: Coleccion, categorias: Categoria[], mes: Mes, or
           });
         },
         deForm(v, id) {
-          const { porMeses: _porMeses, meses, split: _split, personas: _personas, splitTipo: _tipo, splitMonto: _monto, splitPct: _pct, ...g } = conReparto(deForm(campos, v, id), v, origen);
+          const { porMeses: _porMeses, meses, clase, split: _split, personas: _personas, splitTipo: _tipo, splitMonto: _monto, splitPct: _pct, ...g } = conReparto(deForm(campos, v, id), v, origen);
           return {
             ...g,
             ...(porDia && { frecuencia: 'mes', porDia: { ...porDia, tarifa: g.monto } }),
+            ...(clase !== DE_CATEGORIA && { clase }),
             ...(porMeses(v) && !porDia && { frecuencia: 'mes', meses }),
             ...(v.split === true && { split: splitDeForm(v) }),
           };

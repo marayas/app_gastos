@@ -61,7 +61,7 @@ export function useDatos() {
       const existe = (actual.current?.[col] as Item[] | undefined)?.some((x) => x.id === item.id) ?? false;
       setEstado((d) => {
         if (!d) return d;
-        const lista = d[col] as Item[];
+        const lista = (d[col] ?? []) as Item[];
         return { ...d, [col]: existe ? lista.map((x) => (x.id === item.id ? item : x)) : [...lista, item] };
       });
       const peticion = () => (existe ? api('PUT', `/api/${col}/${item.id}`, item) : api('POST', `/api/${col}`, item));
@@ -76,7 +76,7 @@ export function useDatos() {
   const borrar = useCallback(
     (col: Coleccion, id: string) => {
       clearTimeout(diferidos.current.get(`${col}:${id}`));
-      setEstado((d) => d && { ...d, [col]: (d[col] as Item[]).filter((x) => x.id !== id) });
+      setEstado((d) => d && { ...d, [col]: ((d[col] ?? []) as Item[]).filter((x) => x.id !== id) });
       enviar(() => api('DELETE', `/api/${col}/${id}`));
     },
     [enviar],

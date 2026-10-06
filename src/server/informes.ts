@@ -1,19 +1,28 @@
 import {
+  CATEGORIA_INVERSIONES,
+  claseDeGasto,
   FACTOR,
   finMSI,
   gastoDelMes,
   gastoTerminado,
   gastoVigente,
   ingresoVigente,
+  META,
   msiActiva,
   msiDelMes,
   msiRestanteTotal,
   pagosRestantes,
   proyeccion,
+  regla,
+  rendimientoMensual,
   repartir,
+  saldoInversion,
+  totalInversiones,
   resumen,
   resumenPorPersona,
   sumarMeses,
+  tasaEfectivaAnual,
+  TOPE_DEUDA,
   ultimoMesMSI,
 } from '../shared/calc.ts';
 import type { Datos, Mes } from '../shared/tipos.ts';
@@ -25,9 +34,29 @@ import type { Datos, Mes } from '../shared/tipos.ts';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const MSI = 'Meses sin intereses';
+const CLASES = { basico: 'básico', lujo: 'lujo', ahorro: 'ahorro', deuda: 'deuda' };
+const FRECUENCIAS = { mes: 'mes', bimestre: 'bimestre', trimestre: 'trimestre', anio: 'año' };
+
+/** Regla 50/20/30 sobre el ingreso fijo, y nivel de endeudamiento contra su tope. */
+function informeRegla(d: Datos, mes: Mes, periodo: 'mes' | 'anio') {
+  const r = regla(d, mes, periodo);
+  const pct = (v: number) => (r.ingresoFijo ? Math.round((v / r.ingresoFijo) * 1000) / 10 : null);
+  return {
+    ingresoFijo: r2(r.ingresoFijo),
+    basicos: { monto: r2(r.basico), porcentaje: pct(r.basico), metaMaxima: META.basico },
+    lujos: { monto: r2(r.lujo), porcentaje: pct(r.lujo), metaMaxima: META.lujo },
+    ahorro: { monto: r2(r.ahorro), porcentaje: pct(r.ahorro), metaMinima: META.ahorro },
+    deudas: {
+      monto: r2(r.deuda), porcentaje: pct(r.deuda), topeMaximo: TOPE_DEUDA,
+      margenParaOtraMensualidad: r2(r.margenDeuda),
+      nota: 'Incluye los pagos de MSI y los gastos marcados como deuda; no entran en básicos, lujos ni ahorro.',
+    },
+  };
+}
 
 function nombresDeCategoria(d: Datos) {
   const nombres = new Map(d.categorias.map((c) => [c.id, c.nombre]));
+  if (!nombres.has(CATEGORIA_INVERSIONES)) nombres.set(CATEGORIA_INVERSIONES, 'Rendimiento de inversiones');
   return (id: string | undefined) => (id ? (nombres.get(id) ?? id) : 'Sin categoría');
 }
 
@@ -65,6 +94,7 @@ export function informeResumen(d: Datos, mes: Mes, periodo: 'mes' | 'anio') {
             persona: p.persona.nombre, ingresos: r2(p.ingresos), leTocaAportar: r2(p.egresos), leQueda: r2(p.sobrante),
           }))
         : null,
+    regla503020: informeRegla(d, mes, periodo),
     nota: periodo === 'anio' ? 'En la vista de 12 meses, MSI es lo que falta pagar en total.' : undefined,
   };
 }
@@ -99,6 +129,23 @@ export function informeIngresos(d: Datos, mes: Mes) {
       hasta: x.hasta ?? null,
       vigenteEsteMes: ingresoVigente(x, mes),
     })),
+    // Las compartidas del hogar y las privadas de quien consulta; las privadas de otros miembros no aparecen.
+    inversiones: (d.inversiones ?? []).map((x) => ({
+      nombre: x.nombre,
+      saldoEstimado: r2(saldoInversion(x, mes)),
+      saldoCapturado: { monto: r2(x.monto), mes: x.desde ?? null },
+      tasaAnual: x.tasa,
+      interesSeCalcula: x.capitalizacion,
+      tasaEfectivaAnual: Math.round(tasaEfectivaAnual(x) * 10000) / 100,
+      rendimientoMensualEstimado: r2(rendimientoMensual(x, mes)),
+      // true: el rendimiento se retira y suma a los ingresos; false: se reinvierte y el saldo crece solo.
+      cuentaComoIngreso: x.comoIngreso === true,
+      privada: !!x.privadaDe,
+    })),
+    totalInvertido: (() => {
+      const t = totalInversiones(d, mes);
+      return { compartido: r2(t.compartido), personal: r2(t.personal), total: r2(t.compartido + t.personal) };
+    })(),
   };
 }
 
@@ -111,7 +158,8 @@ export function informeGastos(d: Datos, mes: Mes, categoria?: string) {
       concepto: g.nombre,
       categoria: nombre(g.categoria),
       monto: r2(g.porDia ? g.porDia.tarifa : g.monto),
-      frecuencia: g.porDia ? 'por día de clases' : g.frecuencia === 'anio' ? 'año' : g.frecuencia,
+      frecuencia: g.porDia ? 'por día de clases' : FRECUENCIAS[g.frecuencia],
+      tipo: CLASES[claseDeGasto(d, g)],
       costoEsteMes: r2(gastoDelMes(d, g, mes)),
       equivalenteMensual: g.porDia || g.meses ? null : r2(gastoDelMes(d, g, mes)),
       soloEnMeses: g.meses ?? null, // se paga completo solo en esos meses; null = todos los meses

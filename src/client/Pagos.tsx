@@ -23,7 +23,7 @@ interface Props {
   abrir(col: Coleccion, item: Item | null): void;
 }
 
-const CUANDO = { mes: '', bimestre: 'cada bimestre', anio: 'al año' };
+const CUANDO = { mes: '', bimestre: 'cada bimestre', trimestre: 'cada trimestre', anio: 'al año' };
 
 export function Pagos({ real, datos, mes, store, abrir }: Props) {
   const pagado = new Set(real.pagos.filter((p) => p.mes === mes).map((p) => p.itemId));
@@ -208,7 +208,7 @@ export function Pagos({ real, datos, mes, store, abrir }: Props) {
       {apartados.length > 0 && (
         <section className="panel">
           <h2>Apartar cada mes</h2>
-          <p className="note first">Se pagan cada bimestre o una vez al año; aquí ves cuánto separar al mes para cubrirlos.</p>
+          <p className="note first">Se pagan cada bimestre, cada trimestre o una vez al año; aquí ves cuánto separar al mes para cubrirlos.</p>
           {apartados.map(filaGasto)}
           <div className="psub"><span>Subtotal</span><b className="amt">{fmt(apartados.reduce((s, g) => s + monto(g), 0))}</b></div>
         </section>
